@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
-import PlyrAdapter from './PlyrAdapter';
-import VideoJsAdapter from './VideoJsAdapter';
-import ShakaAdapter from './ShakaAdapter';
-import PlayerSelector from './PlayerSelector';
 
 const HLS_TIMEOUT_MS = 8000;
 const MAX_HLS_RETRIES = 2;
-const PLAYER_KEY = 'animei_player';
 
 export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
-  const [player, setPlayer] = useState(() => localStorage.getItem(PLAYER_KEY) || 'hlsjs');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -46,14 +40,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     const proxyBase = '/api/proxy';
     const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
     return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
-  }, []);
-
-  const handlePlayerChange = useCallback((id) => {
-    setPlayer(id);
-    localStorage.setItem(PLAYER_KEY, id);
-    setError(null);
-    setIsLoading(true);
-    setUseIframe(false);
   }, []);
 
   const switchToIframe = useCallback(() => {
@@ -182,7 +168,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || shouldUseIframe || player !== 'hlsjs') return;
+    if (!video || shouldUseIframe) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -224,7 +210,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [fallbackSrc, shouldUseIframe, switchToIframe, player]);
+  }, [fallbackSrc, shouldUseIframe, switchToIframe]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -318,19 +304,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
 
-  const proxiedSrc = src && isM3u8
-    ? `/api/proxy?url=${encodeURIComponent(src)}&h=${encodeURIComponent(JSON.stringify(headers))}`
-    : src;
-
   if (shouldUseIframe) {
     const iframeSrc = useIframe ? (fallbackSrc || src) : src;
     return (
       <div className="relative bg-black rounded-lg overflow-hidden" ref={containerRef}>
-        <div className="absolute top-0 right-0 z-20 p-3">
-          <PlayerSelector value={player} onChange={handlePlayerChange} />
-        </div>
         {title && (
-          <div className="absolute top-0 left-0 right-0 z-10 p-4 pr-20 bg-gradient-to-b from-black/80 to-transparent">
+          <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent">
             <h2 className="text-white text-lg font-semibold">{title}</h2>
           </div>
         )}
@@ -346,43 +325,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <span className="loading loading-spinner loading-lg text-primary"></span>
           </div>
         )}
-      </div>
-    );
-  }
-
-  if (player !== 'hlsjs') {
-    const Adapter = player === 'plyr' ? PlyrAdapter : player === 'videojs' ? VideoJsAdapter : ShakaAdapter;
-    return (
-      <div className="relative bg-black rounded-lg overflow-hidden" ref={containerRef}>
-        <div className="absolute top-0 right-0 z-20 p-3">
-          <PlayerSelector value={player} onChange={handlePlayerChange} />
-        </div>
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
-            <div className="text-center max-w-md px-4">
-              <AlertTriangle className="w-16 h-16 mx-auto text-red-400/60 mb-4" />
-              <p className="text-white text-lg font-semibold mb-2">Video Unavailable</p>
-              <p className="text-gray-400 text-sm mb-4">{error}</p>
-              <div className="flex gap-2 justify-center">
-                <button className="btn btn-sm btn-primary" onClick={() => { setError(null); setIsLoading(true); }}>
-                  Try Again
-                </button>
-                <button className="btn btn-sm btn-ghost text-gray-400" onClick={() => window.location.reload()}>
-                  Reload Page
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        <Adapter
-          src={proxiedSrc}
-          poster={poster}
-          title={title}
-          onError={(msg) => {
-            if (fallbackSrc) { switchToIframe(); } else { setError(msg); }
-          }}
-          onReady={() => setIsLoading(false)}
-        />
       </div>
     );
   }
@@ -467,8 +409,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
             <div className="flex-1" />
 
-            <PlayerSelector value={player} onChange={handlePlayerChange} />
-
             <div className="flex items-center gap-1">
               <button className="btn btn-ghost btn-xs text-white hover:text-primary" onClick={toggleMute}>
                 {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : volume < 0.5 ? <Volume1 className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -510,7 +450,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       </div>
 
       {title && (
-        <div className={`absolute top-0 left-0 right-0 p-4 pr-20 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 ${
+        <div className={`absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0'
         }`}>
           <h2 className="text-white text-lg font-semibold">{title}</h2>

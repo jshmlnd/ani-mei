@@ -19,13 +19,10 @@
     "daisyui": "^5.7.9",
     "hls.js": "^1.6.16",
     "lucide-react": "^1.28.0",
-    "plyr": "^3.8.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
-    "shaka-player": "^5.2.4",
-    "tailwindcss": "^4.3.3",
-    "video.js": "^8.23.9"
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
