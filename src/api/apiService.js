@@ -54,10 +54,10 @@ query ($page: Int, $perPage: Int, $sort: [MediaSort], $type: MediaType, $status:
 }`;
 
 const HENTAI_QUERY = `
-query ($page: Int, $perPage: Int, $sort: [MediaSort], $type: MediaType, $genre: [String]) {
+query ($page: Int, $perPage: Int, $sort: [MediaSort], $type: MediaType, $isAdult: Boolean) {
   Page(page: $page, perPage: $perPage) {
     pageInfo { total lastPage hasNextPage currentPage }
-    media(sort: $sort, type: $type, genre: $genre) {
+    media(sort: $sort, type: $type, isAdult: $isAdult) {
       ${MEDIA_FIELDS}
     }
   }
@@ -166,7 +166,7 @@ export async function getHentaiAnime(page = 1, perPage = 20) {
     perPage,
     sort: ['POPULARITY_DESC'],
     type: 'ANIME',
-    genre: ['Hentai'],
+    isAdult: true,
   });
   return { media: data.Page.media, pageInfo: data.Page.pageInfo };
 }
