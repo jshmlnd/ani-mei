@@ -75,11 +75,8 @@ export async function onRequest(context) {
           },
         });
       }
-    }
-
-    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
       return new Response(JSON.stringify({
-        error: 'Upstream returned non-video content',
+        error: 'M3U8 URL returned non-M3U8 content',
         contentType,
         url: targetUrl,
       }), {
@@ -88,19 +85,15 @@ export async function onRequest(context) {
       });
     }
 
-    if (!contentType.includes('video') && !contentType.includes('octet-stream') && !contentType.includes('mpeg') && !contentType.includes('mp2t')) {
-      const preview = await upstream.clone().text().catch(() => '');
-      if (preview.startsWith('{') || preview.startsWith('[') || preview.startsWith('<')) {
-        return new Response(JSON.stringify({
-          error: 'Upstream returned non-video content',
-          contentType,
-          url: targetUrl,
-          preview: preview.slice(0, 200),
-        }), {
-          status: 502,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
+    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('image/')) {
+      return new Response(JSON.stringify({
+        error: 'Upstream returned non-video content',
+        contentType,
+        url: targetUrl,
+      }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     return new Response(upstream.body, {

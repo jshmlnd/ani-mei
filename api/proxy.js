@@ -58,26 +58,19 @@ export default async function handler(req, res) {
         res.setHeader('Cache-Control', 'public, max-age=2');
         return res.send(rewritten);
       }
-    }
-
-    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
       return res.status(502).json({
-        error: 'Upstream returned non-video content',
+        error: 'M3U8 URL returned non-M3U8 content',
         contentType,
         url: targetUrl,
       });
     }
 
-    if (!contentType.includes('video') && !contentType.includes('octet-stream') && !contentType.includes('mpeg') && !contentType.includes('mp2t')) {
-      const preview = await upstream.clone().text().catch(() => '');
-      if (preview.startsWith('{') || preview.startsWith('[') || preview.startsWith('<')) {
-        return res.status(502).json({
-          error: 'Upstream returned non-video content',
-          contentType,
-          url: targetUrl,
-          preview: preview.slice(0, 200),
-        });
-      }
+    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('image/')) {
+      return res.status(502).json({
+        error: 'Upstream returned non-video content',
+        contentType,
+        url: targetUrl,
+      });
     }
 
     res.setHeader('Access-Control-Allow-Origin', '*');
