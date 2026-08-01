@@ -150,8 +150,18 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = isM3u8 ? getProxyUrl(src) : src;
+      if (fallbackSrc && !hlsStartedRef.current) {
+        hlsTimeoutRef.current = setTimeout(() => {
+          if (!hlsStartedRef.current) {
+            switchToIframe();
+          }
+        }, HLS_TIMEOUT_MS);
+      }
+    } else if (fallbackSrc && !fallbackSrc.includes('.m3u8')) {
+      switchToIframe();
     } else {
-      video.src = src;
+      setError('Your browser does not support HLS video playback');
+      setIsLoading(false);
     }
   }, [src, shouldUseIframe, isM3u8, fallbackSrc, getProxyUrl, switchToIframe]);
 
@@ -184,6 +194,15 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     const onDurationChange = () => setDuration(video.duration);
     const onWaiting = () => setIsLoading(true);
     const onCanPlay = () => setIsLoading(false);
+    const onLoadedMetadata = () => {
+      if (!hlsStartedRef.current) {
+        hlsStartedRef.current = true;
+        if (hlsTimeoutRef.current) {
+          clearTimeout(hlsTimeoutRef.current);
+          hlsTimeoutRef.current = null;
+        }
+      }
+    };
     const onError = () => {
       const videoErr = video.error;
       const code = videoErr?.code;
@@ -202,6 +221,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     video.addEventListener('durationchange', onDurationChange);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('error', onError);
 
     return () => {
@@ -211,6 +231,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('durationchange', onDurationChange);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('error', onError);
     };
   }, [fallbackSrc, shouldUseIframe, switchToIframe]);
