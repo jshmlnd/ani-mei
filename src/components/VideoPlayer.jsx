@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import shaka from 'shaka-player';
+import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 
-const SHAKA_TIMEOUT_MS = 8000;
-const MAX_SHAKA_RETRIES = 2;
+const HLS_TIMEOUT_MS = 8000;
+const MAX_HLS_RETRIES = 2;
 
 export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
   const videoRef = useRef(null);
-  const playerRef = useRef(null);
+  const hlsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -24,9 +24,9 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
   const headersRef = useRef(headers);
-  const shakaStartedRef = useRef(false);
-  const shakaTimeoutRef = useRef(null);
-  const shakaRetryRef = useRef(0);
+  const hlsStartedRef = useRef(false);
+  const hlsTimeoutRef = useRef(null);
+  const hlsRetryRef = useRef(0);
 
   useEffect(() => {
     headersRef.current = headers;
@@ -43,115 +43,131 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   }, []);
 
   const switchToIframe = useCallback(() => {
-    if (playerRef.current) {
-      playerRef.current.destroy();
-      playerRef.current = null;
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
     }
-    if (shakaTimeoutRef.current) {
-      clearTimeout(shakaTimeoutRef.current);
-      shakaTimeoutRef.current = null;
+    if (hlsTimeoutRef.current) {
+      clearTimeout(hlsTimeoutRef.current);
+      hlsTimeoutRef.current = null;
     }
     setUseIframe(true);
   }, []);
 
-  const initPlayer = useCallback(() => {
+  const initHls = useCallback(() => {
     if (shouldUseIframe) return;
     const video = videoRef.current;
     if (!video || !src) return;
 
-    if (playerRef.current) {
-      playerRef.current.destroy();
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
     }
-    shakaStartedRef.current = false;
+    hlsStartedRef.current = false;
 
-    shaka.polyfill.installAll();
-
-    if (shaka.Player.isBrowserSupported()) {
-      const player = new shaka.Player(video);
-      playerRef.current = player;
-
-      player.addEventListener('error', (event) => {
-        const code = event.detail?.code || 'unknown';
-        const message = event.detail?.message || 'unknown error';
-        const data = event.detail?.data || [];
-        console.error(`[Shaka] Error code ${code}:`, message, data);
-
-        if (fallbackSrc && shakaRetryRef.current >= MAX_SHAKA_RETRIES) {
-          switchToIframe();
-          return;
-        }
-
-        if (shakaRetryRef.current < MAX_SHAKA_RETRIES) {
-          shakaRetryRef.current++;
-          player.load(getProxyUrl(src)).catch(() => {});
-        } else if (fallbackSrc) {
-          switchToIframe();
-        } else {
-          setError(`Playback error (code ${code})`);
-        }
+    if (isM3u8 && Hls.isSupported()) {
+      const hls = new Hls({
+        maxBufferLength: 10,
+        maxMaxBufferLength: 30,
+        startLevel: -1,
+        startFragPrefetch: true,
+        lowLatencyMode: false,
+        backBufferLength: 0,
       });
-
-      player.addEventListener('mediaqualitychanged', (event) => {
-        const level = event.newQuality;
-        const variant = player.getVariantTracks().find((t) => t.height === level);
-        setQuality(variant ? player.getVariantTracks().indexOf(variant) : -1);
-      });
+      hlsRef.current = hls;
 
       const proxiedUrl = getProxyUrl(src);
-      console.log('[Shaka] Loading:', proxiedUrl);
-      player.load(proxiedUrl).then(() => {
-        shakaStartedRef.current = true;
-        shakaRetryRef.current = 0;
-        if (shakaTimeoutRef.current) {
-          clearTimeout(shakaTimeoutRef.current);
-          shakaTimeoutRef.current = null;
+      hls.loadSource(proxiedUrl);
+      hls.attachMedia(video);
+
+      if (fallbackSrc) {
+        hlsTimeoutRef.current = setTimeout(() => {
+          if (!hlsStartedRef.current) {
+            switchToIframe();
+          }
+        }, HLS_TIMEOUT_MS);
+      }
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        hlsStartedRef.current = true;
+        hlsRetryRef.current = 0;
+        if (hlsTimeoutRef.current) {
+          clearTimeout(hlsTimeoutRef.current);
+          hlsTimeoutRef.current = null;
         }
-        const tracks = player.getVariantTracks().filter((t) => t.height);
-        const unique = [...new Map(tracks.map((t) => [t.height, t])).values()];
-        const levels = unique.map((t, i) => ({
-          index: i,
-          height: t.height,
-          width: t.width,
-          bitrate: t.bandwidth,
-          label: t.height ? `${t.height}p` : `${Math.round(t.bandwidth / 1000)}kbps`,
+        const levels = data.levels.map((level, index) => ({
+          index,
+          height: level.height,
+          width: level.width,
+          bitrate: level.bitrate,
+          label: level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}kbps`,
         }));
         setAvailableLevels(levels);
         setIsLoading(false);
+        hls.currentLevel = -1;
         video.play().catch(() => {});
-      }).catch((err) => {
-        console.warn('Shaka load failed:', err);
-        if (fallbackSrc) {
-          switchToIframe();
-        } else {
-          setError('Failed to load stream');
-        }
       });
 
-      if (fallbackSrc) {
-        shakaTimeoutRef.current = setTimeout(() => {
-          if (!shakaStartedRef.current) {
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+        setQuality(data.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          if (fallbackSrc && hlsRetryRef.current >= MAX_HLS_RETRIES) {
             switchToIframe();
+            return;
           }
-        }, SHAKA_TIMEOUT_MS);
-      }
+
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              if (hlsRetryRef.current < MAX_HLS_RETRIES) {
+                hlsRetryRef.current++;
+                hls.startLoad();
+              } else if (fallbackSrc) {
+                switchToIframe();
+              } else {
+                setError(`Network error (code ${data.details || 'unknown'})`);
+                hls.destroy();
+              }
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              if (hlsRetryRef.current < MAX_HLS_RETRIES) {
+                hlsRetryRef.current++;
+                hls.recoverMediaError();
+              } else if (fallbackSrc) {
+                switchToIframe();
+              } else {
+                setError(`Media decode error (code ${data.details || 'unknown'})`);
+                hls.destroy();
+              }
+              break;
+            default:
+              setError(`Playback error (type ${data.type}, code ${data.details || 'unknown'})`);
+              hls.destroy();
+              break;
+          }
+        }
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = isM3u8 ? getProxyUrl(src) : src;
     } else {
       video.src = src;
     }
-  }, [src, shouldUseIframe, fallbackSrc, getProxyUrl, switchToIframe]);
+  }, [src, shouldUseIframe, isM3u8, fallbackSrc, getProxyUrl, switchToIframe]);
 
   useEffect(() => {
-    initPlayer();
+    initHls();
     return () => {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
-      if (shakaTimeoutRef.current) {
-        clearTimeout(shakaTimeoutRef.current);
-        shakaTimeoutRef.current = null;
+      if (hlsTimeoutRef.current) {
+        clearTimeout(hlsTimeoutRef.current);
+        hlsTimeoutRef.current = null;
       }
     };
-  }, [initPlayer]);
+  }, [initHls]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -244,15 +260,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   }, []);
 
   const changeQuality = useCallback((levelIndex) => {
-    if (!playerRef.current) return;
-    const tracks = playerRef.current.getVariantTracks().filter((t) => t.height);
-    const unique = [...new Map(tracks.map((t) => [t.height, t])).values()];
-    if (levelIndex === -1) {
-      playerRef.current.configure('abr.enabled', true);
-      setQuality(-1);
-    } else if (unique[levelIndex]) {
-      playerRef.current.configure('abr.enabled', false);
-      playerRef.current.selectVariantTrack(unique[levelIndex], true);
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = levelIndex;
       setQuality(levelIndex);
     }
   }, []);
@@ -351,7 +360,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <p className="text-white text-lg font-semibold mb-2">Video Unavailable</p>
             <p className="text-gray-400 text-sm mb-4">{error}</p>
             <div className="flex gap-2 justify-center">
-              <button className="btn btn-sm btn-primary" onClick={() => { setError(null); setIsLoading(true); initPlayer(); }}>
+              <button className="btn btn-sm btn-primary" onClick={() => { setError(null); setIsLoading(true); initHls(); }}>
                 Try Again
               </button>
               <button className="btn btn-sm btn-ghost text-gray-400" onClick={() => window.location.reload()}>
