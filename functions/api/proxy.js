@@ -40,30 +40,11 @@ export async function onRequest(context) {
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
     const contentLength = upstream.headers.get('content-length');
 
-    if (contentType.includes('mpegurl') || contentType.includes('m3u8')) {
-      const body = await upstream.text();
-      const firstChars = body.trimStart().slice(0, 10);
-      if (!firstChars.startsWith('#EXTM3U')) {
-        return new Response(JSON.stringify({ error: 'Upstream returned non-M3U8 content', url: targetUrl }), {
-          status: 502,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      const origin = reqUrl.origin;
-      const proxyBase = `${origin}/api/proxy`;
-      const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-      const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
+    const isLikelyM3u8 = contentType.includes('mpegurl') || contentType.includes('m3u8')
+      || /\.m3u8($|\?)/i.test(targetUrl)
+      || contentType.includes('image/jpeg');
 
-      return new Response(rewritten, {
-        headers: {
-          'Content-Type': 'application/vnd.apple.mpegurl',
-          'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'public, max-age=2',
-        },
-      });
-    }
-
-    if (/\.m3u8($|\?)/i.test(targetUrl) || contentType.includes('mpegurl') || contentType.includes('m3u8')) {
+    if (isLikelyM3u8) {
       const body = await upstream.text();
       const firstChars = body.trimStart().slice(0, 10);
       if (firstChars.startsWith('#EXTM3U')) {
@@ -80,7 +61,7 @@ export async function onRequest(context) {
           },
         });
       }
-      if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('image/')) {
+      if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
         return new Response(JSON.stringify({
           error: 'M3U8 URL returned non-video content',
           contentType,
@@ -100,7 +81,7 @@ export async function onRequest(context) {
       });
     }
 
-    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('image/')) {
+    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
       return new Response(JSON.stringify({
         error: 'Upstream returned non-video content',
         contentType,

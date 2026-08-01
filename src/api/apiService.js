@@ -69,17 +69,15 @@ const STREAM_ADAPTERS = {
       }));
     },
     async getStream(base, animeId, episode) {
-      const streamUrl = `${base}/play?id=${encodeURIComponent(animeId)}&ep=${episode}`;
-      const { data, headers } = await axios.get(streamUrl, { timeout: 20000, responseType: 'text', transformResponse: [(d) => d] });
-      if (!data || !data.includes('#EXTM3U')) throw new Error('No valid m3u8 URL');
-      const m3u8Lines = data.trim().split('\n');
-      const streamLine = m3u8Lines.find((l) => l.startsWith('/')) || '';
-      const resolvedM3u8 = streamLine ? `${base}${streamLine}` : '';
-      if (!resolvedM3u8) throw new Error('No valid m3u8 URL');
+      const streamUrl = `${base}/episode-stream?id=${encodeURIComponent(animeId)}&ep=${episode}`;
+      const { data } = await axios.get(streamUrl, { timeout: 20000 });
+      if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
+      const m3u8 = data.data.direct_m3u8 || '';
+      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
-        m3u8: proxyUrl(resolvedM3u8),
-        embedUrl: '',
-        m3u8Headers: {},
+        m3u8: proxyUrl(m3u8),
+        embedUrl: data.data.streaming_link || '',
+        m3u8Headers: data.data.m3u8_headers || {},
       };
     },
   },

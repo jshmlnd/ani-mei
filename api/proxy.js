@@ -31,24 +31,11 @@ export default async function handler(req, res) {
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
     const contentLength = upstream.headers.get('content-length');
 
-    if (contentType.includes('mpegurl') || contentType.includes('m3u8')) {
-      const body = await upstream.text();
-      const firstChars = body.trimStart().slice(0, 10);
-      if (!firstChars.startsWith('#EXTM3U')) {
-        return res.status(502).json({ error: 'Upstream returned non-M3U8 content', url: targetUrl });
-      }
-      const origin = req.headers.origin || 'https://animei-snowy.vercel.app';
-      const proxyBase = `${origin}/api/proxy`;
-      const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-      const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
+    const isLikelyM3u8 = contentType.includes('mpegurl') || contentType.includes('m3u8')
+      || /\.m3u8($|\?)/i.test(targetUrl)
+      || contentType.includes('image/jpeg');
 
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'public, max-age=2');
-      return res.send(rewritten);
-    }
-
-    if (/\.m3u8($|\?)/i.test(targetUrl) || contentType.includes('mpegurl') || contentType.includes('m3u8')) {
+    if (isLikelyM3u8) {
       const body = await upstream.text();
       const firstChars = body.trimStart().slice(0, 10);
       if (firstChars.startsWith('#EXTM3U')) {
