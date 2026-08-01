@@ -73,12 +73,22 @@ const STREAM_ADAPTERS = {
       const { data } = await axios.get(streamUrl, { timeout: 20000 });
       if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
       const m3u8 = data.data.direct_m3u8 || '';
-      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
-      return {
-        m3u8: proxyUrl(m3u8),
-        embedUrl: data.data.streaming_link || '',
-        m3u8Headers: data.data.m3u8_headers || {},
-      };
+      const embedUrl = data.data.streaming_link || '';
+      if (m3u8 && m3u8.includes('.m3u8')) {
+        return {
+          m3u8: proxyUrl(m3u8),
+          embedUrl,
+          m3u8Headers: data.data.m3u8_headers || {},
+        };
+      }
+      if (embedUrl) {
+        return {
+          m3u8: embedUrl,
+          embedUrl,
+          m3u8Headers: {},
+        };
+      }
+      throw new Error('No valid m3u8 URL');
     },
   },
   hianime: {
