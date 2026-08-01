@@ -27,7 +27,12 @@ export default async function handler(req, res) {
     const text = await upstream.text();
     const match = text.match(/"streamLink":"([^"]+)"/);
     if (!match) throw new Error('No streamLink in RSC response');
-    const m3u8 = `https://stream.animeparadise.moe/m3u8?url=${encodeURIComponent(match[1])}`;
+
+    const masterUrl = `https://stream.animeparadise.moe/m3u8?url=${encodeURIComponent(match[1])}`;
+    const masterRes = await fetch(masterUrl);
+    const masterText = await masterRes.text();
+    const variantLine = masterText.split('\n').map((l) => l.trim()).find((l) => l.startsWith('/') || l.startsWith('http'));
+    const m3u8 = variantLine ? new URL(variantLine, masterUrl).toString() : masterUrl;
     return res.json({ success: true, m3u8 });
   } catch (err) {
     return res.status(502).json({ success: false, error: err.message });

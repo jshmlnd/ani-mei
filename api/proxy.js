@@ -33,7 +33,8 @@ export default async function handler(req, res) {
 
     const isLikelyM3u8 = contentType.includes('mpegurl') || contentType.includes('m3u8')
       || /\.m3u8($|\?)/i.test(targetUrl)
-      || contentType.includes('image/jpeg');
+      || contentType.includes('image/jpeg')
+      || /stream\.animeparadise\.moe/i.test(targetUrl);
 
     if (isLikelyM3u8) {
       const buffer = await upstream.arrayBuffer();
