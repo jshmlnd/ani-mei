@@ -25,15 +25,23 @@ export default async function handler(req, res) {
     }
 
     const buffer = await upstream.arrayBuffer();
-    const firstBytes = new Uint8Array(buffer.slice(0, 16));
-    const textPreview = new TextDecoder().decode(firstBytes);
+    const firstBytes = new Uint8Array(buffer.slice(0, 32));
+    const textPreview = new TextDecoder().decode(firstBytes).trimStart();
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
-    const isM3u8 = textPreview.trimStart().startsWith('#EXT') && (
+    const isJson = contentType.includes('json') || textPreview.startsWith('{') || textPreview.startsWith('[');
+    const isM3u8 = textPreview.startsWith('#EXTM3U') && (
       contentType.includes('mpegurl') ||
       contentType.includes('m3u8') ||
-      contentType.includes('octet-stream') ||
-      targetUrl.includes('.m3u8')
+      /\.m3u8($|\?)/i.test(targetUrl)
     );
+
+    if (isJson && !isM3u8) {
+      return res.status(502).json({
+        error: 'Upstream returned non-video response',
+        url: targetUrl,
+        body: new TextDecoder().decode(buffer).slice(0, 500),
+      });
+    }
 
     if (isM3u8) {
       const body = new TextDecoder().decode(buffer);
