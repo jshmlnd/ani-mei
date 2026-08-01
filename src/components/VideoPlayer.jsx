@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 
+const HLS_TIMEOUT_MS = 12000;
+
 export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -21,6 +23,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
   const headersRef = useRef(headers);
+  const hlsStartedRef = useRef(false);
+  const hlsTimeoutRef = useRef(null);
 
   useEffect(() => {
     headersRef.current = headers;
@@ -38,15 +42,27 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
   }, []);
 
+  const switchToIframe = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    if (hlsTimeoutRef.current) {
+      clearTimeout(hlsTimeoutRef.current);
+      hlsTimeoutRef.current = null;
+    }
+    setUseIframe(true);
+  }, []);
+
   const initHls = useCallback(() => {
     const video = videoRef.current;
     if (!video || !activeSrc) return;
+    if (useIframe || isEmbed) return;
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
     }
-
-    if (useIframe) return;
+    hlsStartedRef.current = false;
 
     if (isM3u8) {
       if (Hls.isSupported()) {
@@ -61,7 +77,20 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         hls.loadSource(proxiedUrl);
         hls.attachMedia(video);
 
+        if (fallbackSrc) {
+          hlsTimeoutRef.current = setTimeout(() => {
+            if (!hlsStartedRef.current) {
+              switchToIframe();
+            }
+          }, HLS_TIMEOUT_MS);
+        }
+
         hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+          hlsStartedRef.current = true;
+          if (hlsTimeoutRef.current) {
+            clearTimeout(hlsTimeoutRef.current);
+            hlsTimeoutRef.current = null;
+          }
           const levels = data.levels.map((level, index) => ({
             index,
             height: level.height,
@@ -81,29 +110,22 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
+            if (fallbackSrc) {
+              switchToIframe();
+              return;
+            }
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                if (fallbackSrc) {
-                  hls.destroy();
-                  setUseIframe(true);
-                } else {
-                  hls.startLoad();
-                }
+                hls.startLoad();
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
                 hls.recoverMediaError();
                 break;
               default:
-                if (fallbackSrc) {
-                  setUseIframe(true);
-                } else {
-                  setError('Video cannot be played (Error Code: 102630). The stream may be unavailable or corrupted.');
-                }
+                setError('Video cannot be played. The stream may be unavailable or corrupted.');
                 hls.destroy();
                 break;
             }
-          } else {
-            console.warn('HLS non-fatal error:', data.type, data.details);
           }
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -112,20 +134,25 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     } else {
       video.src = activeSrc;
     }
-  }, [activeSrc, fallbackSrc, useIframe, isM3u8, getProxyUrl]);
+  }, [activeSrc, fallbackSrc, useIframe, isEmbed, isM3u8, getProxyUrl, switchToIframe]);
 
   useEffect(() => {
     initHls();
     return () => {
       if (hlsRef.current) {
         hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      if (hlsTimeoutRef.current) {
+        clearTimeout(hlsTimeoutRef.current);
+        hlsTimeoutRef.current = null;
       }
     };
   }, [initHls]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || useIframe || isEmbed) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -139,10 +166,10 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     const onWaiting = () => setIsLoading(true);
     const onCanPlay = () => setIsLoading(false);
     const onError = () => {
-      if (fallbackSrc && !useIframe) {
-        setUseIframe(true);
+      if (fallbackSrc) {
+        switchToIframe();
       } else {
-        setError('Video cannot be played (Error Code: 102630). Check your connection and try again.');
+        setError('Video cannot be played. Check your connection and try again.');
       }
     };
 
@@ -163,7 +190,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [fallbackSrc, useIframe]);
+  }, [fallbackSrc, useIframe, isEmbed, switchToIframe]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -339,7 +366,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <p className="text-white text-lg font-semibold mb-2">Video Unavailable</p>
             <p className="text-gray-400 text-sm mb-4">{error}</p>
             <div className="flex gap-2 justify-center">
-              <button className="btn btn-sm btn-primary" onClick={() => { setError(null); initHls(); }}>
+              <button className="btn btn-sm btn-primary" onClick={() => { setError(null); setIsLoading(true); initHls(); }}>
                 Try Again
               </button>
               <button className="btn btn-sm btn-ghost text-gray-400" onClick={() => window.location.reload()}>
