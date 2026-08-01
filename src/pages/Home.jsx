@@ -93,15 +93,15 @@ export default function Home() {
   );
 
   const titleMap = {
-    TRENDING: 'Trending Anime',
-    NEW: 'New Releases',
-    TOP: 'Top Rated',
+    TRENDING: '',
+    NEW: '',
+    TOP: '',
   };
 
   const subTitleMap = {
-    TRENDING: 'What everyone is watching right now',
-    NEW: 'Freshly added anime and episodes',
-    TOP: 'Highest rated anime of all time',
+    TRENDING: '',
+    NEW: '',
+    TOP: '',
   };
 
   return (
