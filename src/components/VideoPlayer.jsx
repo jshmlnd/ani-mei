@@ -73,7 +73,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       player.addEventListener('error', (event) => {
         const code = event.detail?.code || 'unknown';
         const message = event.detail?.message || 'unknown error';
-        console.warn(`Shaka error (code ${code}):`, message);
+        const data = event.detail?.data || [];
+        console.error(`[Shaka] Error code ${code}:`, message, data);
 
         if (fallbackSrc && shakaRetryRef.current >= MAX_SHAKA_RETRIES) {
           switchToIframe();
@@ -98,6 +99,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
       player.attachMedia(video).then(() => {
         const proxiedUrl = getProxyUrl(src);
+        console.log('[Shaka] Loading:', proxiedUrl);
         return player.load(proxiedUrl);
       }).then(() => {
         shakaStartedRef.current = true;

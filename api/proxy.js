@@ -9,13 +9,15 @@ export default async function handler(req, res) {
   const headers = h ? JSON.parse(decodeURIComponent(h)) : {};
 
   try {
-    const upstream = await fetch(targetUrl, {
-      headers: {
-        'Referer': headers.Referer || 'https://play2.echovideo.ru/',
-        'Origin': headers.Origin || 'https://play2.echovideo.ru',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+    const fetchHeaders = {
+      'Referer': headers.Referer || 'https://play2.echovideo.ru/',
+      'Origin': headers.Origin || 'https://play2.echovideo.ru',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    };
+    if (headers.Range) fetchHeaders['Range'] = headers.Range;
+    if (headers['Accept-Ranges']) fetchHeaders['Accept-Ranges'] = headers['Accept-Ranges'];
+
+    const upstream = await fetch(targetUrl, { headers: fetchHeaders });
 
     if (!upstream.ok) {
       return res.status(upstream.status).json({
@@ -83,7 +85,12 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', contentType || 'application/octet-stream');
     res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Accept-Ranges', 'bytes');
     if (contentLength) res.setHeader('Content-Length', contentLength);
+    const contentRange = upstream.headers.get('content-range');
+    if (contentRange) res.setHeader('Content-Range', contentRange);
+    const status = upstream.status === 206 ? 206 : 200;
+    res.status(status);
 
     const reader = upstream.body.getReader();
     const write = async () => {
@@ -107,7 +114,26 @@ function rewriteM3U8(content, masterUrl, proxyBase, encodedHeaders) {
 
   return lines.map(line => {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) return line;
+    if (!trimmed) return line;
+
+    if (trimmed.startsWith('#')) {
+      const uriMatch = trimmed.match(/URI="([^"]+)"/i);
+      if (uriMatch) {
+        let absoluteUrl;
+        const uriVal = uriMatch[1];
+        if (uriVal.startsWith('http://') || uriVal.startsWith('https://')) {
+          absoluteUrl = uriVal;
+        } else if (uriVal.startsWith('/')) {
+          const u = new URL(masterUrl);
+          absoluteUrl = `${u.origin}${uriVal}`;
+        } else {
+          absoluteUrl = masterDir + uriVal;
+        }
+        const rewritten = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&h=${encodedHeaders}`;
+        return line.replace(uriMatch[0], `URI="${rewritten}"`);
+      }
+      return line;
+    }
 
     let absoluteUrl;
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {

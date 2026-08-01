@@ -15,13 +15,15 @@ export async function onRequest(context) {
   const headers = h ? JSON.parse(decodeURIComponent(h)) : {};
 
   try {
-    const upstream = await fetch(targetUrl, {
-      headers: {
-        'Referer': headers.Referer || 'https://play2.echovideo.ru/',
-        'Origin': headers.Origin || 'https://play2.echovideo.ru',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+    const fetchHeaders = {
+      'Referer': headers.Referer || 'https://play2.echovideo.ru/',
+      'Origin': headers.Origin || 'https://play2.echovideo.ru',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    };
+    if (headers.Range) fetchHeaders['Range'] = headers.Range;
+    if (headers['Accept-Ranges']) fetchHeaders['Accept-Ranges'] = headers['Accept-Ranges'];
+
+    const upstream = await fetch(targetUrl, { headers: fetchHeaders });
 
     if (!upstream.ok) {
       return new Response(JSON.stringify({
@@ -34,6 +36,7 @@ export async function onRequest(context) {
     }
 
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
+    const contentLength = upstream.headers.get('content-length');
 
     if (contentType.includes('mpegurl') || contentType.includes('m3u8')) {
       const body = await upstream.text();
@@ -106,12 +109,20 @@ export async function onRequest(context) {
       });
     }
 
+    const respHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': contentType || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=86400',
+      'Accept-Ranges': 'bytes',
+    };
+    if (contentLength) respHeaders['Content-Length'] = contentLength;
+    const contentRange = upstream.headers.get('content-range');
+    if (contentRange) respHeaders['Content-Range'] = contentRange;
+    const respStatus = upstream.status === 206 ? 206 : 200;
+
     return new Response(upstream.body, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': contentType || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=86400',
-      },
+      status: respStatus,
+      headers: respHeaders,
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message, url: targetUrl }), {
@@ -127,7 +138,26 @@ function rewriteM3U8(content, masterUrl, proxyBase, encodedHeaders) {
 
   return lines.map(line => {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) return line;
+    if (!trimmed) return line;
+
+    if (trimmed.startsWith('#')) {
+      const uriMatch = trimmed.match(/URI="([^"]+)"/i);
+      if (uriMatch) {
+        let absoluteUrl;
+        const uriVal = uriMatch[1];
+        if (uriVal.startsWith('http://') || uriVal.startsWith('https://')) {
+          absoluteUrl = uriVal;
+        } else if (uriVal.startsWith('/')) {
+          const u = new URL(masterUrl);
+          absoluteUrl = `${u.origin}${uriVal}`;
+        } else {
+          absoluteUrl = masterDir + uriVal;
+        }
+        const rewritten = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&h=${encodedHeaders}`;
+        return line.replace(uriMatch[0], `URI="${rewritten}"`);
+      }
+      return line;
+    }
 
     let absoluteUrl;
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
