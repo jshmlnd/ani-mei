@@ -499,14 +499,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           <h2 className="text-white text-lg font-semibold">{title}</h2>
         </div>
       )}
-
-      {src && (
-        <div className={`absolute bottom-14 left-0 right-0 px-3 pb-1 transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0'
-        }`}>
-          <p className="text-[9px] font-mono text-white/40 truncate" title={src}>{src}</p>
-        </div>
-      )}
     </div>
   );
 }
