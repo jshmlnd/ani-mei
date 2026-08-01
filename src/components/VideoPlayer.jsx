@@ -66,9 +66,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
     if (isM3u8 && Hls.isSupported()) {
       const hls = new Hls({
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
+        maxBufferLength: 10,
+        maxMaxBufferLength: 30,
         startLevel: -1,
+        startFragPrefetch: true,
+        lowLatencyMode: false,
+        backBufferLength: 0,
       });
       hlsRef.current = hls;
 

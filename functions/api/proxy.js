@@ -33,30 +33,23 @@ export async function onRequest(context) {
       });
     }
 
-    const buffer = await upstream.arrayBuffer();
-    const firstBytes = new Uint8Array(buffer.slice(0, 32));
-    const textPreview = new TextDecoder().decode(firstBytes).trimStart();
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
-    const isJson = contentType.includes('json') || textPreview.startsWith('{') || textPreview.startsWith('[');
-    const isM3u8 = textPreview.startsWith('#EXTM3U') && (
-      contentType.includes('mpegurl') ||
+
+    const needsRewrite = contentType.includes('mpegurl') ||
       contentType.includes('m3u8') ||
-      /\.m3u8($|\?)/i.test(targetUrl)
-    );
+      (/\.m3u8($|\?)/i.test(targetUrl) && !contentType.includes('video'));
 
-    if (isJson && !isM3u8) {
-      return new Response(JSON.stringify({
-        error: 'Upstream returned non-video response',
-        url: targetUrl,
-        body: new TextDecoder().decode(buffer).slice(0, 500),
-      }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (isM3u8) {
-      const body = new TextDecoder().decode(buffer);
+    if (needsRewrite) {
+      const body = await upstream.text();
+      const firstChars = body.trimStart().slice(0, 10);
+      if (!firstChars.startsWith('#EXTM3U')) {
+        return new Response(body, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': contentType || 'application/octet-stream',
+          },
+        });
+      }
       const origin = reqUrl.origin;
       const proxyBase = `${origin}/api/proxy`;
       const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
@@ -66,12 +59,12 @@ export async function onRequest(context) {
         headers: {
           'Content-Type': 'application/vnd.apple.mpegurl',
           'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'public, max-age=2',
         },
       });
     }
 
-    return new Response(buffer, {
+    return new Response(upstream.body, {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': contentType || 'application/octet-stream',

@@ -24,27 +24,21 @@ export default async function handler(req, res) {
       });
     }
 
-    const buffer = await upstream.arrayBuffer();
-    const firstBytes = new Uint8Array(buffer.slice(0, 32));
-    const textPreview = new TextDecoder().decode(firstBytes).trimStart();
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
-    const isJson = contentType.includes('json') || textPreview.startsWith('{') || textPreview.startsWith('[');
-    const isM3u8 = textPreview.startsWith('#EXTM3U') && (
-      contentType.includes('mpegurl') ||
+    const contentLength = upstream.headers.get('content-length');
+
+    const needsRewrite = contentType.includes('mpegurl') ||
       contentType.includes('m3u8') ||
-      /\.m3u8($|\?)/i.test(targetUrl)
-    );
+      (/\.m3u8($|\?)/i.test(targetUrl) && !contentType.includes('video'));
 
-    if (isJson && !isM3u8) {
-      return res.status(502).json({
-        error: 'Upstream returned non-video response',
-        url: targetUrl,
-        body: new TextDecoder().decode(buffer).slice(0, 500),
-      });
-    }
-
-    if (isM3u8) {
-      const body = new TextDecoder().decode(buffer);
+    if (needsRewrite) {
+      const body = await upstream.text();
+      const firstChars = body.trimStart().slice(0, 10);
+      if (!firstChars.startsWith('#EXTM3U')) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', contentType || 'application/octet-stream');
+        return res.send(body);
+      }
       const origin = req.headers.origin || 'https://animei-snowy.vercel.app';
       const proxyBase = `${origin}/api/proxy`;
       const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
@@ -52,16 +46,28 @@ export default async function handler(req, res) {
 
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'public, max-age=2');
       return res.send(rewritten);
     }
 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', contentType || 'application/octet-stream');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.send(new Uint8Array(buffer));
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+
+    const reader = upstream.body.getReader();
+    const write = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) { res.end(); return; }
+        res.write(value);
+      }
+    };
+    await write();
   } catch (err) {
-    return res.status(500).json({ error: err.message, url: targetUrl });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: err.message, url: targetUrl });
+    }
   }
 }
 
