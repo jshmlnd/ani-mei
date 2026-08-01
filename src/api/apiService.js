@@ -1,12 +1,60 @@
 import axios from 'axios';
 
 const ANILIST_API = import.meta.env.VITE_ANILIST_API || 'https://graphql.anilist.co';
-const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || 'https://123anime-api.mdtahseen7378.workers.dev')
+const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 
+const PROXY_BASE = '/api/proxy';
+
+function proxyUrl(targetUrl) {
+  return `${PROXY_BASE}?url=${encodeURIComponent(targetUrl)}`;
+}
+
 const STREAM_ADAPTERS = {
+  animekai: {
+    async search(base, keyword) {
+      const { data } = await axios.get(`${base}/api/search?keyword=${encodeURIComponent(keyword)}`, { timeout: 15000 });
+      if (!data?.success || !data?.results?.length) return [];
+      return data.results.map((r) => ({
+        id: r.slug || '',
+        title: r.title || '',
+        type: 'sub',
+      }));
+    },
+    async getStream(base, animeId, episode) {
+      const { data: infoData } = await axios.get(`${base}/api/anime/${animeId}`, { timeout: 15000 });
+      if (!infoData?.success || !infoData?.ani_id) throw new Error('Anime info not found');
+
+      const { data: epData } = await axios.get(`${base}/api/episodes/${infoData.ani_id}`, { timeout: 15000 });
+      if (!epData?.success || !epData?.episodes?.length) throw new Error('Episode list not found');
+      const ep = epData.episodes.find((e) => String(e.number) === String(episode))
+        || epData.episodes[Math.min(parseInt(episode) - 1, epData.episodes.length - 1)];
+      if (!ep?.token) throw new Error('Episode not found');
+
+      const { data: srvData } = await axios.get(`${base}/api/servers/${ep.token}`, { timeout: 15000 });
+      if (!srvData?.success) throw new Error('Servers not found');
+      const subServers = srvData.servers?.sub || srvData.servers?.softsub || [];
+      if (!subServers.length) throw new Error('No servers available');
+      const linkId = subServers[0].link_id;
+      if (!linkId) throw new Error('No link ID');
+
+      const { data: srcData } = await axios.get(`${base}/api/source/${linkId}`, { timeout: 20000 });
+      if (!srcData?.success) throw new Error('Stream source not found');
+      const source = srcData.sources?.find((s) => s.file?.includes('.m3u8')) || srcData.sources?.[0] || {};
+      const m3u8 = source.file || '';
+      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
+
+      return {
+        m3u8: proxyUrl(m3u8),
+        embedUrl: srcData.embed_url || '',
+        m3u8Headers: {},
+        skipIntro: srcData.skip?.intro || null,
+        skipOutro: srcData.skip?.outro || null,
+      };
+    },
+  },
   '123anime': {
     async search(base, keyword) {
       const { data: results } = await axios.get(`${base}/search?keyword=${encodeURIComponent(keyword)}`, { timeout: 15000 });
@@ -27,8 +75,8 @@ const STREAM_ADAPTERS = {
       const m3u8 = data.data.direct_m3u8 || '';
       if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
+        m3u8: proxyUrl(m3u8),
         embedUrl: data.data.streaming_link || '',
-        m3u8,
         m3u8Headers: data.data.m3u8_headers || {},
       };
     },
@@ -56,8 +104,8 @@ const STREAM_ADAPTERS = {
       const m3u8 = data.data.link?.file || '';
       if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
+        m3u8: proxyUrl(m3u8),
         embedUrl: m3u8,
-        m3u8,
         m3u8Headers: {},
       };
     },
@@ -86,8 +134,8 @@ const STREAM_ADAPTERS = {
       const m3u8 = source.file || '';
       if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
+        m3u8: proxyUrl(m3u8),
         embedUrl: m3u8,
-        m3u8,
         m3u8Headers: {},
       };
     },
@@ -95,7 +143,7 @@ const STREAM_ADAPTERS = {
 };
 
 function parseStreamApiEntry(entry) {
-  const match = entry.match(/^(123anime|hianime|anikoto):(.+)$/);
+  const match = entry.match(/^(animekai|123anime|hianime|anikoto):(.+)$/);
   if (match) return { type: match[1], base: match[2].trim() };
   return { type: '123anime', base: entry };
 }
