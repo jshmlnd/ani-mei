@@ -33,7 +33,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     headersRef.current = headers;
   });
 
-  const isM3u8 = src && (src.includes('.m3u8') || src.includes('hls'));
+  const isM3u8 = src && (src.includes('.m3u8') || src.includes('/m3u8') || src.includes('hls'));
   const isEmbed = src && !isM3u8 && !useIframe && (src.includes('embed') || src.includes('echovideo'));
   const shouldUseIframe = useIframe || isEmbed;
 

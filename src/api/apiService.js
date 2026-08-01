@@ -198,7 +198,7 @@ const STREAM_ADAPTERS = {
       if (!data?.success || !data?.m3u8) throw new Error('Failed to get stream');
       return {
         m3u8: data.m3u8,
-        embedUrl: data.m3u8,
+        embedUrl: '',
         m3u8Headers: {},
       };
     },
@@ -464,7 +464,7 @@ export async function getStreamUrl(animeTitle, episode) {
       const stream = await adapter.getStream(base, best.id, episode);
       if (!stream?.m3u8) throw new Error('No stream returned');
 
-      const hasDirect = stream.m3u8.includes('.m3u8') || stream.m3u8.includes('.mp4');
+      const hasDirect = stream.m3u8.includes('.m3u8') || stream.m3u8.includes('/m3u8') || stream.m3u8.includes('.mp4');
       if (!hasDirect && stream.embedUrl) {
         console.warn(`Stream API (${type}) returned embed-only result, deferring to fallback`);
         embedFallback = embedFallback || stream;
