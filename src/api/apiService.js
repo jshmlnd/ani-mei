@@ -8,6 +8,13 @@ const ENV_STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || '')
 
 const ANIMEPARADISE_ENTRY = 'animeparadise:https://api.animeparadise.moe';
 
+function slugify(s) {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 const STREAM_API_BASES = [
   ...ENV_STREAM_API_BASES,
   ...(ENV_STREAM_API_BASES.includes(ANIMEPARADISE_ENTRY) ? [] : [ANIMEPARADISE_ENTRY]),
@@ -58,16 +65,9 @@ const STREAM_ADAPTERS = {
   },
   '123anime': {
     async search(base, keyword) {
-      const { data: results } = await axios.get(`${base}/search?query=${encodeURIComponent(keyword)}`, { timeout: 15000 });
-      if (!results?.length) return [];
-      return results.map((r) => ({
-        id: r.title
-          ?.toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '') || '',
-        title: r.title || '',
-        type: r.type || 'sub',
-      }));
+      const directId = slugify(keyword);
+      if (!directId) return [];
+      return [{ id: directId, title: keyword, type: 'sub' }];
     },
     async getStream(base, animeId, episode) {
       const streamUrl = `${base}/episode-stream?id=${encodeURIComponent(animeId)}&ep=${episode}`;
@@ -456,21 +456,27 @@ export async function getStreamUrl(animeTitle, episode) {
       const results = await adapter.search(base, animeTitle);
       if (!results.length) throw new Error('Anime not found');
 
-      const lower = animeTitle.toLowerCase();
-      const best = results.find((r) => r.title.toLowerCase().includes(lower)) || results[0];
+      let firstEmbed;
+      for (const candidate of results) {
+        if (!candidate?.id) continue;
+        let stream;
+        try {
+          stream = await adapter.getStream(base, candidate.id, episode);
+        } catch {
+          continue;
+        }
+        if (!stream?.m3u8) continue;
 
-      if (!best.id) throw new Error('No valid anime ID');
-
-      const stream = await adapter.getStream(base, best.id, episode);
-      if (!stream?.m3u8) throw new Error('No stream returned');
-
-      const hasDirect = stream.m3u8.includes('.m3u8') || stream.m3u8.includes('/m3u8') || stream.m3u8.includes('.mp4');
-      if (!hasDirect && stream.embedUrl) {
-        console.warn(`Stream API (${type}) returned embed-only result, deferring to fallback`);
-        embedFallback = embedFallback || stream;
+        const hasDirect = stream.m3u8.includes('.m3u8') || stream.m3u8.includes('/m3u8') || stream.m3u8.includes('.mp4');
+        if (hasDirect) return stream;
+        firstEmbed = firstEmbed || stream;
+      }
+      if (firstEmbed) {
+        console.warn(`Stream API (${type}) returned embed-only results, deferring to fallback`);
+        embedFallback = embedFallback || firstEmbed;
         continue;
       }
-      return stream;
+      throw new Error('No direct stream returned');
     } catch (err) {
       lastError = err;
       console.warn(`Stream API (${type}) failed for ${base}:`, err.message);
