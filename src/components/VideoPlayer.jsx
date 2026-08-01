@@ -67,7 +67,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     shaka.polyfill.installAll();
 
     if (shaka.Player.isBrowserSupported()) {
-      const player = new shaka.Player();
+      const player = new shaka.Player(video);
       playerRef.current = player;
 
       player.addEventListener('error', (event) => {
@@ -97,11 +97,9 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         setQuality(variant ? player.getVariantTracks().indexOf(variant) : -1);
       });
 
-      player.attachMedia(video).then(() => {
-        const proxiedUrl = getProxyUrl(src);
-        console.log('[Shaka] Loading:', proxiedUrl);
-        return player.load(proxiedUrl);
-      }).then(() => {
+      const proxiedUrl = getProxyUrl(src);
+      console.log('[Shaka] Loading:', proxiedUrl);
+      player.load(proxiedUrl).then(() => {
         shakaStartedRef.current = true;
         shakaRetryRef.current = 0;
         if (shakaTimeoutRef.current) {
