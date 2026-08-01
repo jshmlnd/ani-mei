@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const ANILIST_API = import.meta.env.VITE_ANILIST_API || 'https://graphql.anilist.co';
-const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || 'https://123anime-api.mdtahseen7378.workers.dev, https://hianime-api-*.workers.dev, https://anikototvapi.vercel.app/api')
+const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || 'https://123anime-api.mdtahseen7378.workers.dev')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
@@ -24,9 +24,11 @@ const STREAM_ADAPTERS = {
       const streamUrl = `${base}/episode-stream?id=${encodeURIComponent(animeId)}&ep=${episode}`;
       const { data } = await axios.get(streamUrl, { timeout: 20000 });
       if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
+      const m3u8 = data.data.direct_m3u8 || '';
+      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
         embedUrl: data.data.streaming_link || '',
-        m3u8: data.data.direct_m3u8 || '',
+        m3u8,
         m3u8Headers: data.data.m3u8_headers || {},
       };
     },
@@ -51,9 +53,11 @@ const STREAM_ADAPTERS = {
       const streamUrl = `${base}/api/v1/stream?id=${encodeURIComponent(epId)}&server=hd-1&type=sub`;
       const { data } = await axios.get(streamUrl, { timeout: 20000 });
       if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
+      const m3u8 = data.data.link?.file || '';
+      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
-        embedUrl: data.data.link?.file || '',
-        m3u8: data.data.link?.file || '',
+        embedUrl: m3u8,
+        m3u8,
         m3u8Headers: {},
       };
     },
@@ -79,9 +83,11 @@ const STREAM_ADAPTERS = {
       const { data } = await axios.get(streamUrl, { timeout: 20000 });
       if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
       const source = data.data.sources?.[0] || {};
+      const m3u8 = source.file || '';
+      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
-        embedUrl: source.file || '',
-        m3u8: source.file || '',
+        embedUrl: m3u8,
+        m3u8,
         m3u8Headers: {},
       };
     },
