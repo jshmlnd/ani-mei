@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { MonitorPlay, ChevronDown } from 'lucide-react';
 
 const PLAYERS = [
@@ -12,20 +12,30 @@ export default function PlayerSelector({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
+  const stopPropagation = useCallback((e) => e.stopPropagation(), []);
+
   useEffect(() => {
+    if (!open) return;
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
 
   const current = PLAYERS.find((p) => p.id === value) || PLAYERS[0];
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative" onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-white/70 hover:text-white bg-white/[0.06] hover:bg-white/[0.1] rounded-lg border border-white/[0.08] transition-all duration-200"
         title="Switch video player"
       >
@@ -35,12 +45,17 @@ export default function PlayerSelector({ value, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute bottom-full right-0 mb-2 w-48 bg-[var(--bg-surface)] rounded-xl shadow-2xl shadow-black/50 border border-white/[0.08] overflow-hidden z-50 animate-fade-in" style={{ animationDuration: '0.15s' }}>
+        <div
+          className="absolute bottom-full right-0 mb-2 w-48 bg-[var(--bg-surface)] rounded-xl shadow-2xl shadow-black/50 border border-white/[0.08] overflow-hidden animate-fade-in"
+          style={{ animationDuration: '0.15s', zIndex: 9999 }}
+          onMouseDown={stopPropagation}
+          onTouchStart={stopPropagation}
+        >
           <div className="p-1">
             {PLAYERS.map((player) => (
               <button
                 key={player.id}
-                onClick={() => { onChange(player.id); setOpen(false); }}
+                onClick={(e) => { e.stopPropagation(); onChange(player.id); setOpen(false); }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors duration-150 ${
                   value === player.id
                     ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
