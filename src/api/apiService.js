@@ -1,7 +1,10 @@
 import axios from 'axios';
 
 const ANILIST_API = import.meta.env.VITE_ANILIST_API || 'https://graphql.anilist.co';
-const STREAM_API_BASE = import.meta.env.VITE_STREAM_API_BASE;
+const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const MEDIA_FIELDS = `
   id
@@ -186,32 +189,43 @@ export function getEpisodeCount(media) {
 }
 
 export async function getStreamUrl(animeTitle, episode) {
-  const searchUrl = `${STREAM_API_BASE}/search?keyword=${encodeURIComponent(animeTitle)}`;
-  const { data: results } = await axios.get(searchUrl, { timeout: 15000 });
-  if (!results?.length) {
-    throw new Error('Anime not found on streaming source');
+  let lastError;
+
+  for (const base of STREAM_API_BASES) {
+    try {
+      const searchUrl = `${base}/search?keyword=${encodeURIComponent(animeTitle)}`;
+      const { data: results } = await axios.get(searchUrl, { timeout: 15000 });
+      if (!results?.length) {
+        throw new Error('Anime not found on streaming source');
+      }
+
+      const lower = animeTitle.toLowerCase();
+      const best = results.find(
+        (r) => r.type === 'sub' && r.title.toLowerCase().includes(lower)
+      ) || results.find((r) => r.type === 'sub') || results[0];
+
+      const slug = best.japanese_title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      const streamUrl = `${base}/episode-stream?id=${encodeURIComponent(slug)}&ep=${episode}`;
+      const { data } = await axios.get(streamUrl, { timeout: 20000 });
+
+      if (!data?.success || !data?.data) {
+        throw new Error('Failed to get stream URL');
+      }
+
+      return {
+        embedUrl: data.data.streaming_link || '',
+        m3u8: data.data.direct_m3u8 || '',
+        m3u8Headers: data.data.m3u8_headers || {},
+      };
+    } catch (err) {
+      lastError = err;
+      console.warn(`Stream API failed for ${base}:`, err.message);
+    }
   }
 
-  const lower = animeTitle.toLowerCase();
-  const best = results.find(
-    (r) => r.type === 'sub' && r.title.toLowerCase().includes(lower)
-  ) || results.find((r) => r.type === 'sub') || results[0];
-
-  const slug = best.japanese_title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-
-  const streamUrl = `${STREAM_API_BASE}/episode-stream?id=${encodeURIComponent(slug)}&ep=${episode}`;
-  const { data } = await axios.get(streamUrl, { timeout: 20000 });
-
-  if (!data?.success || !data?.data) {
-    throw new Error('Failed to get stream URL');
-  }
-
-  return {
-    embedUrl: data.data.streaming_link || '',
-    m3u8: data.data.direct_m3u8 || '',
-    m3u8Headers: data.data.m3u8_headers || {},
-  };
+  throw lastError || new Error('No stream API available');
 }
