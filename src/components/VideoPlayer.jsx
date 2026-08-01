@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 
-const isEmbedUrl = (url) => url && (url.includes('embed') || url.includes('echovideo'));
+const HLS_TIMEOUT_MS = 12000;
 
-export default function VideoPlayer({ src, headers = {}, poster, title }) {
+export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -19,26 +19,49 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
   const [error, setError] = useState(null);
   const [quality, setQuality] = useState(-1);
   const [availableLevels, setAvailableLevels] = useState([]);
+  const [useIframe, setUseIframe] = useState(false);
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
   const headersRef = useRef(headers);
+  const hlsStartedRef = useRef(false);
+  const hlsTimeoutRef = useRef(null);
 
   useEffect(() => {
     headersRef.current = headers;
   });
 
-  const useIframe = isEmbedUrl(src);
+  const isM3u8 = src && (src.includes('.m3u8') || src.includes('hls'));
+  const isEmbed = src && !isM3u8 && !useIframe && (src.includes('embed') || src.includes('echovideo'));
+
+  const shouldUseIframe = useIframe || isEmbed;
+
+  const getProxyUrl = useCallback((targetUrl) => {
+    const proxyBase = '/api/proxy';
+    const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
+    return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
+  }, []);
+
+  const switchToIframe = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    if (hlsTimeoutRef.current) {
+      clearTimeout(hlsTimeoutRef.current);
+      hlsTimeoutRef.current = null;
+    }
+    setUseIframe(true);
+  }, []);
 
   const initHls = useCallback(() => {
-    if (useIframe) return;
+    if (shouldUseIframe) return;
     const video = videoRef.current;
     if (!video || !src) return;
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
     }
-
-    const isM3u8 = src.includes('.m3u8') || src.includes('hls');
+    hlsStartedRef.current = false;
 
     if (isM3u8 && Hls.isSupported()) {
       const hls = new Hls({
@@ -48,10 +71,24 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
       });
       hlsRef.current = hls;
 
-      hls.loadSource(src);
+      const proxiedUrl = getProxyUrl(src);
+      hls.loadSource(proxiedUrl);
       hls.attachMedia(video);
 
+      if (fallbackSrc) {
+        hlsTimeoutRef.current = setTimeout(() => {
+          if (!hlsStartedRef.current) {
+            switchToIframe();
+          }
+        }, HLS_TIMEOUT_MS);
+      }
+
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        hlsStartedRef.current = true;
+        if (hlsTimeoutRef.current) {
+          clearTimeout(hlsTimeoutRef.current);
+          hlsTimeoutRef.current = null;
+        }
         const levels = data.levels.map((level, index) => ({
           index,
           height: level.height,
@@ -71,6 +108,10 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
 
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
+          if (fallbackSrc) {
+            switchToIframe();
+            return;
+          }
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               hls.startLoad();
@@ -86,11 +127,11 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = src;
+      video.src = isM3u8 ? getProxyUrl(src) : src;
     } else {
       video.src = src;
     }
-  }, [src, useIframe]);
+  }, [src, shouldUseIframe, isM3u8, fallbackSrc, getProxyUrl, switchToIframe]);
 
   useEffect(() => {
     initHls();
@@ -99,12 +140,16 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      if (hlsTimeoutRef.current) {
+        clearTimeout(hlsTimeoutRef.current);
+        hlsTimeoutRef.current = null;
+      }
     };
   }, [initHls]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || useIframe) return;
+    if (!video || shouldUseIframe) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -118,7 +163,11 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
     const onWaiting = () => setIsLoading(true);
     const onCanPlay = () => setIsLoading(false);
     const onError = () => {
-      setError('Video cannot be played. Check your connection and try again.');
+      if (fallbackSrc) {
+        switchToIframe();
+      } else {
+        setError('Video cannot be played. Check your connection and try again.');
+      }
     };
 
     video.addEventListener('play', onPlay);
@@ -138,7 +187,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [useIframe]);
+  }, [fallbackSrc, shouldUseIframe, switchToIframe]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -261,7 +310,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
 
-  if (useIframe) {
+  if (shouldUseIframe) {
+    const iframeSrc = useIframe ? (fallbackSrc || src) : src;
     return (
       <div className="relative bg-black rounded-lg overflow-hidden" ref={containerRef}>
         {title && (
@@ -270,7 +320,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title }) {
           </div>
         )}
         <iframe
-          src={src}
+          src={iframeSrc}
           className="w-full aspect-video border-0"
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture"

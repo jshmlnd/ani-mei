@@ -1,4 +1,5 @@
 {
+  "outputDirectory": "dist",
   "headers": [
     {
       "source": "/(.*)",
@@ -11,6 +12,11 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
-  ]
+    { "source": "/((?!assets/|api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/proxy.js": {
+      "maxDuration": 10
+    }
+  }
 }
