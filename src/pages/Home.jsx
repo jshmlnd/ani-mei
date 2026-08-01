@@ -108,15 +108,6 @@ export default function Home() {
     <div>
       {!type && trending.length > 0 && <HeroCarousel animeList={trending} />}
 
-      {type && (
-        <div className="pt-24 pb-4">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <h1 className="text-3xl md:text-4xl font-black text-white">{titleMap[type]}</h1>
-            <p className="text-[var(--text-muted)] mt-1">{subTitleMap[type]}</p>
-          </div>
-        </div>
-      )}
-
       <div className="space-y-2">
         {showPopular && popular.length > 0 && (
           <AnimeRow
