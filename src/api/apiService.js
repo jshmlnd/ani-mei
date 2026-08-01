@@ -76,6 +76,18 @@ const STREAM_ADAPTERS = {
         };
       }
       if (embedUrl) {
+        try {
+          const extracted = await extractPlayerCdnM3u8(embedUrl);
+          if (extracted?.m3u8) {
+            return {
+              m3u8: extracted.m3u8,
+              embedUrl,
+              m3u8Headers: { Referer: extracted.referer },
+            };
+          }
+        } catch (err) {
+          console.warn('PlayerCDN extraction failed, falling back to embed:', err.message);
+        }
         return {
           m3u8: embedUrl,
           embedUrl,
@@ -145,6 +157,54 @@ const STREAM_ADAPTERS = {
     },
   },
 };
+
+async function extractPlayerCdnM3u8(embedUrl) {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') {
+    throw new Error('PlayerCDN extraction requires a browser');
+  }
+  let url;
+  try {
+    url = new URL(embedUrl);
+  } catch {
+    throw new Error('Invalid embed URL');
+  }
+  const outer = url.pathname.split('/').filter(Boolean).pop();
+  if (!outer) throw new Error('No embed token');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const hsRes = await fetch(`${url.origin}/hs/${outer}`, { signal: controller.signal });
+    if (!hsRes.ok) throw new Error(`Player page ${hsRes.status}`);
+    const hsHtml = await hsRes.text();
+    const dataId = hsHtml.match(/id="mg-player" data-id="([^"]+)"/)?.[1];
+    if (!dataId) throw new Error('No data-id in player page');
+
+    const srcRes = await fetch(`https://play2.echovideo.ru/getSources?id=${dataId}`, { signal: controller.signal });
+    const raw = await srcRes.text();
+    if (!raw || raw.trim() === '404') throw new Error('getSources rejected');
+
+    let file = null;
+    try {
+      const json = JSON.parse(raw);
+      const root = json?.data && Array.isArray(json.data.sources) ? json.data : json;
+      const sources = root?.sources || [];
+      file = sources.find((s) => typeof s.file === 'string' && s.file.includes('.m3u8'))?.file
+        || sources[0]?.file || null;
+    } catch {
+      /* not JSON */
+    }
+    if (!file) {
+      const m = raw.match(/"file"\s*:\s*"([^"]+\.m3u8[^"]*)"/)
+        || raw.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/);
+      file = m ? m[1] : null;
+    }
+    if (!file || !file.includes('.m3u8')) throw new Error('No m3u8 in sources');
+    return { m3u8: file, referer: url.origin + '/' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function parseStreamApiEntry(entry) {
   const match = entry.match(/^(animekai|123anime|hianime|anikoto):(.+)$/);
@@ -336,6 +396,7 @@ export function getEpisodeCount(media) {
 
 export async function getStreamUrl(animeTitle, episode) {
   let lastError;
+  let embedFallback;
 
   for (const entry of STREAM_API_BASES) {
     const { type, base } = parseStreamApiEntry(entry);
@@ -353,12 +414,23 @@ export async function getStreamUrl(animeTitle, episode) {
 
       if (!best.id) throw new Error('No valid anime ID');
 
-      return await adapter.getStream(base, best.id, episode);
+      const stream = await adapter.getStream(base, best.id, episode);
+      if (!stream?.m3u8) throw new Error('No stream returned');
+
+      const hasDirect = stream.m3u8.includes('.m3u8') || stream.m3u8.includes('.mp4');
+      if (!hasDirect && stream.embedUrl) {
+        console.warn(`Stream API (${type}) returned embed-only result, deferring to fallback`);
+        embedFallback = embedFallback || stream;
+        continue;
+      }
+      return stream;
     } catch (err) {
       lastError = err;
       console.warn(`Stream API (${type}) failed for ${base}:`, err.message);
     }
   }
+
+  if (embedFallback) return embedFallback;
 
   throw lastError || new Error('No stream API available');
 }
