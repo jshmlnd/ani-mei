@@ -51,8 +51,8 @@ export default function Watch() {
         const title = anime.title?.english || anime.title?.romaji || '';
         const data = await getStreamUrl(title, episode);
         if (!cancelled) {
-          setStreamUrl(data.embedUrl || data.m3u8 || '');
-          setStreamFallback(data.m3u8 ? (data.embedUrl || '') : '');
+          setStreamUrl(data.m3u8 || data.embedUrl || '');
+          setStreamFallback(!data.m3u8 && data.embedUrl ? data.embedUrl : '');
           setStreamHeaders(data.m3u8Headers || {});
         }
       } catch {

@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       return res.send(rewritten);
     }
 
-    if (/\.m3u8($|\?)/i.test(targetUrl)) {
+    if (/\.m3u8($|\?)/i.test(targetUrl) || contentType.includes('mpegurl') || contentType.includes('m3u8')) {
       const body = await upstream.text();
       const firstChars = body.trimStart().slice(0, 10);
       if (firstChars.startsWith('#EXTM3U')) {
@@ -57,6 +57,13 @@ export default async function handler(req, res) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Cache-Control', 'public, max-age=2');
         return res.send(rewritten);
+      }
+      if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('image/')) {
+        return res.status(502).json({
+          error: 'M3U8 URL returned non-video content',
+          contentType,
+          url: targetUrl,
+        });
       }
       return res.status(502).json({
         error: 'M3U8 URL returned non-M3U8 content',
