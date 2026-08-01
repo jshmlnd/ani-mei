@@ -92,21 +92,16 @@ export default function Home() {
     </div>
   );
 
-  const titleMap = {
-    TRENDING: '',
-    NEW: '',
-    TOP: '',
-  };
-
-  const subTitleMap = {
-    TRENDING: '',
-    NEW: '',
-    TOP: '',
-  };
-
   return (
     <div>
       {!type && trending.length > 0 && <HeroCarousel animeList={trending} />}
+
+      {type && (
+        <div className="pt-24 pb-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         {showPopular && popular.length > 0 && (
