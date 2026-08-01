@@ -30,7 +30,7 @@ export default async function handler(req, res) {
 
     if (isM3u8) {
       const body = new TextDecoder().decode(buffer);
-      const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || '';
+      const origin = req.headers.origin || 'https://animei-snowy.vercel.app';
       const proxyBase = `${origin}/api/proxy`;
       const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
       const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
