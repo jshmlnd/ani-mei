@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 
-const HLS_TIMEOUT_MS = 12000;
+const isEmbedUrl = (url) => url && (url.includes('embed') || url.includes('echovideo'));
 
-export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
+export default function VideoPlayer({ src, headers = {}, poster, title }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -19,122 +19,78 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const [error, setError] = useState(null);
   const [quality, setQuality] = useState(-1);
   const [availableLevels, setAvailableLevels] = useState([]);
-  const [useIframe, setUseIframe] = useState(false);
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
   const headersRef = useRef(headers);
-  const hlsStartedRef = useRef(false);
-  const hlsTimeoutRef = useRef(null);
 
   useEffect(() => {
     headersRef.current = headers;
   });
 
-  const isM3u8 = src && (src.includes('.m3u8') || src.includes('hls'));
-
-  const activeSrc = useIframe ? (fallbackSrc || src) : src;
-
-  const isEmbed = !useIframe && activeSrc && (activeSrc.includes('embed') || activeSrc.includes('echovideo') || (!activeSrc.includes('.m3u8') && !activeSrc.includes('hls') && !activeSrc.includes('.mp4')));
-
-  const getProxyUrl = useCallback((targetUrl) => {
-    const proxyBase = '/api/proxy';
-    const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
-    return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
-  }, []);
-
-  const switchToIframe = useCallback(() => {
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    if (hlsTimeoutRef.current) {
-      clearTimeout(hlsTimeoutRef.current);
-      hlsTimeoutRef.current = null;
-    }
-    setUseIframe(true);
-  }, []);
+  const useIframe = isEmbedUrl(src);
 
   const initHls = useCallback(() => {
+    if (useIframe) return;
     const video = videoRef.current;
-    if (!video || !activeSrc) return;
-    if (useIframe || isEmbed) return;
+    if (!video || !src) return;
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
     }
-    hlsStartedRef.current = false;
 
-    if (isM3u8) {
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          startLevel: -1,
-        });
-        hlsRef.current = hls;
+    const isM3u8 = src.includes('.m3u8') || src.includes('hls');
 
-        const proxiedUrl = getProxyUrl(activeSrc);
-        hls.loadSource(proxiedUrl);
-        hls.attachMedia(video);
+    if (isM3u8 && Hls.isSupported()) {
+      const hls = new Hls({
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        startLevel: -1,
+      });
+      hlsRef.current = hls;
 
-        if (fallbackSrc) {
-          hlsTimeoutRef.current = setTimeout(() => {
-            if (!hlsStartedRef.current) {
-              switchToIframe();
-            }
-          }, HLS_TIMEOUT_MS);
+      hls.loadSource(src);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        const levels = data.levels.map((level, index) => ({
+          index,
+          height: level.height,
+          width: level.width,
+          bitrate: level.bitrate,
+          label: level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}kbps`,
+        }));
+        setAvailableLevels(levels);
+        setIsLoading(false);
+        hls.currentLevel = -1;
+        video.play().catch(() => {});
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+        setQuality(data.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              setError('Video cannot be played. The stream may be unavailable.');
+              hls.destroy();
+              break;
+          }
         }
-
-        hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-          hlsStartedRef.current = true;
-          if (hlsTimeoutRef.current) {
-            clearTimeout(hlsTimeoutRef.current);
-            hlsTimeoutRef.current = null;
-          }
-          const levels = data.levels.map((level, index) => ({
-            index,
-            height: level.height,
-            width: level.width,
-            bitrate: level.bitrate,
-            label: level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}kbps`,
-          }));
-          setAvailableLevels(levels);
-          setIsLoading(false);
-          hls.currentLevel = -1;
-          video.play().catch(() => {});
-        });
-
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
-          setQuality(data.level);
-        });
-
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) {
-            if (fallbackSrc) {
-              switchToIframe();
-              return;
-            }
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError();
-                break;
-              default:
-                setError('Video cannot be played. The stream may be unavailable or corrupted.');
-                hls.destroy();
-                break;
-            }
-          }
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = getProxyUrl(activeSrc);
-      }
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = src;
     } else {
-      video.src = activeSrc;
+      video.src = src;
     }
-  }, [activeSrc, fallbackSrc, useIframe, isEmbed, isM3u8, getProxyUrl, switchToIframe]);
+  }, [src, useIframe]);
 
   useEffect(() => {
     initHls();
@@ -143,16 +99,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-      if (hlsTimeoutRef.current) {
-        clearTimeout(hlsTimeoutRef.current);
-        hlsTimeoutRef.current = null;
-      }
     };
   }, [initHls]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || useIframe || isEmbed) return;
+    if (!video || useIframe) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -166,11 +118,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     const onWaiting = () => setIsLoading(true);
     const onCanPlay = () => setIsLoading(false);
     const onError = () => {
-      if (fallbackSrc) {
-        switchToIframe();
-      } else {
-        setError('Video cannot be played. Check your connection and try again.');
-      }
+      setError('Video cannot be played. Check your connection and try again.');
     };
 
     video.addEventListener('play', onPlay);
@@ -190,7 +138,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [fallbackSrc, useIframe, isEmbed, switchToIframe]);
+  }, [useIframe]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -313,8 +261,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
 
-  if (isEmbed || useIframe) {
-    const iframeSrc = useIframe ? (fallbackSrc || src) : src;
+  if (useIframe) {
     return (
       <div className="relative bg-black rounded-lg overflow-hidden" ref={containerRef}>
         {title && (
@@ -323,7 +270,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           </div>
         )}
         <iframe
-          src={iframeSrc}
+          src={src}
           className="w-full aspect-video border-0"
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture"
