@@ -26,9 +26,17 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     headersRef.current = headers;
   });
 
+  const isM3u8 = src && (src.includes('.m3u8') || src.includes('hls'));
+
   const activeSrc = useIframe ? (fallbackSrc || src) : src;
 
   const isEmbed = !useIframe && activeSrc && (activeSrc.includes('embed') || activeSrc.includes('echovideo') || (!activeSrc.includes('.m3u8') && !activeSrc.includes('hls') && !activeSrc.includes('.mp4')));
+
+  const getProxyUrl = useCallback((targetUrl) => {
+    const proxyBase = '/api/proxy';
+    const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
+    return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
+  }, []);
 
   const initHls = useCallback(() => {
     const video = videoRef.current;
@@ -40,23 +48,17 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
     if (useIframe) return;
 
-    if (activeSrc.includes('.m3u8') || activeSrc.includes('hls')) {
+    if (isM3u8) {
       if (Hls.isSupported()) {
         const hls = new Hls({
           maxBufferLength: 30,
           maxMaxBufferLength: 60,
           startLevel: -1,
-          fetchSetup: (url, init) => {
-            const req = new Request(url, init);
-            Object.entries(headersRef.current).forEach(([key, value]) => {
-              req.headers.set(key, value);
-            });
-            return req;
-          },
         });
         hlsRef.current = hls;
 
-        hls.loadSource(activeSrc);
+        const proxiedUrl = getProxyUrl(activeSrc);
+        hls.loadSource(proxiedUrl);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
@@ -105,12 +107,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           }
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = activeSrc;
+        video.src = getProxyUrl(activeSrc);
       }
     } else {
       video.src = activeSrc;
     }
-  }, [activeSrc, fallbackSrc, useIframe]);
+  }, [activeSrc, fallbackSrc, useIframe, isM3u8, getProxyUrl]);
 
   useEffect(() => {
     initHls();
