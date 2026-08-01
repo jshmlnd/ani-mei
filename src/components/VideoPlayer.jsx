@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 
-const HLS_TIMEOUT_MS = 12000;
+const HLS_TIMEOUT_MS = 8000;
+const MAX_HLS_RETRIES = 2;
 
 export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
   const videoRef = useRef(null);
@@ -25,6 +26,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const headersRef = useRef(headers);
   const hlsStartedRef = useRef(false);
   const hlsTimeoutRef = useRef(null);
+  const hlsRetryRef = useRef(0);
 
   useEffect(() => {
     headersRef.current = headers;
@@ -85,6 +87,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
         hlsStartedRef.current = true;
+        hlsRetryRef.current = 0;
         if (hlsTimeoutRef.current) {
           clearTimeout(hlsTimeoutRef.current);
           hlsTimeoutRef.current = null;
@@ -108,19 +111,36 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
-          if (fallbackSrc) {
+          if (fallbackSrc && hlsRetryRef.current >= MAX_HLS_RETRIES) {
             switchToIframe();
             return;
           }
+
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              if (hlsRetryRef.current < MAX_HLS_RETRIES) {
+                hlsRetryRef.current++;
+                hls.startLoad();
+              } else if (fallbackSrc) {
+                switchToIframe();
+              } else {
+                setError(`Network error (code ${data.details || 'unknown'})`);
+                hls.destroy();
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
+              if (hlsRetryRef.current < MAX_HLS_RETRIES) {
+                hlsRetryRef.current++;
+                hls.recoverMediaError();
+              } else if (fallbackSrc) {
+                switchToIframe();
+              } else {
+                setError(`Media decode error (code ${data.details || 'unknown'})`);
+                hls.destroy();
+              }
               break;
             default:
-              setError('Video cannot be played. The stream may be unavailable.');
+              setError(`Playback error (type ${data.type}, code ${data.details || 'unknown'})`);
               hls.destroy();
               break;
           }
@@ -163,10 +183,14 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     const onWaiting = () => setIsLoading(true);
     const onCanPlay = () => setIsLoading(false);
     const onError = () => {
+      const videoErr = video.error;
+      const code = videoErr?.code;
+      const message = videoErr?.message || 'unknown error';
+      const detail = code ? ` (error code ${code}: ${message})` : '';
       if (fallbackSrc) {
         switchToIframe();
       } else {
-        setError('Video cannot be played. Check your connection and try again.');
+        setError(`Video cannot be played${detail}`);
       }
     };
 

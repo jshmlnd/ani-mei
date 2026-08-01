@@ -18,14 +18,22 @@ export default async function handler(req, res) {
     });
 
     if (!upstream.ok) {
-      return res.status(upstream.status).json({ error: `Upstream ${upstream.status}` });
+      return res.status(upstream.status).json({
+        error: `Upstream returned ${upstream.status}`,
+        url: targetUrl,
+      });
     }
 
     const buffer = await upstream.arrayBuffer();
     const firstBytes = new Uint8Array(buffer.slice(0, 16));
     const textPreview = new TextDecoder().decode(firstBytes);
-    const isM3u8 = textPreview.trimStart().startsWith('#EXT');
-    const contentType = upstream.headers.get('content-type') || '';
+    const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
+    const isM3u8 = textPreview.trimStart().startsWith('#EXT') && (
+      contentType.includes('mpegurl') ||
+      contentType.includes('m3u8') ||
+      contentType.includes('octet-stream') ||
+      targetUrl.includes('.m3u8')
+    );
 
     if (isM3u8) {
       const body = new TextDecoder().decode(buffer);
@@ -45,7 +53,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.send(new Uint8Array(buffer));
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message, url: targetUrl });
   }
 }
 
