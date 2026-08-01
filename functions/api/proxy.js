@@ -45,13 +45,14 @@ export async function onRequest(context) {
       || contentType.includes('image/jpeg');
 
     if (isLikelyM3u8) {
-      const body = await upstream.text();
-      const firstChars = body.trimStart().slice(0, 10);
-      if (firstChars.startsWith('#EXTM3U')) {
+      const buffer = await upstream.arrayBuffer();
+      const decoder = new TextDecoder();
+      const head = decoder.decode(buffer.slice(0, Math.min(16, buffer.byteLength)));
+      if (head.trimStart().startsWith('#EXTM3U')) {
         const origin = reqUrl.origin;
         const proxyBase = `${origin}/api/proxy`;
         const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-        const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
+        const rewritten = rewriteM3U8(decoder.decode(buffer), targetUrl, proxyBase, encodedHeaders);
 
         return new Response(rewritten, {
           headers: {
@@ -71,14 +72,19 @@ export async function onRequest(context) {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({
-        error: 'M3U8 URL returned non-M3U8 content',
-        contentType,
-        url: targetUrl,
-      }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      // Not a playlist: some CDNs label media segments (e.g. .ts) as image/jpeg.
+      // Forward the bytes so iOS/hls.js can demux them instead of rejecting.
+      const respHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': contentType.includes('image/jpeg') ? 'video/mp2t' : (contentType || 'application/octet-stream'),
+        'Cache-Control': 'public, max-age=86400',
+        'Accept-Ranges': 'bytes',
+        'Content-Length': String(buffer.byteLength),
+      };
+      const contentRange = upstream.headers.get('content-range');
+      if (contentRange) respHeaders['Content-Range'] = contentRange;
+      const status = upstream.status === 206 ? 206 : 200;
+      return new Response(buffer, { status, headers: respHeaders });
     }
 
     if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {

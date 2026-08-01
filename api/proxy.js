@@ -36,31 +36,39 @@ export default async function handler(req, res) {
       || contentType.includes('image/jpeg');
 
     if (isLikelyM3u8) {
-      const body = await upstream.text();
-      const firstChars = body.trimStart().slice(0, 10);
-      if (firstChars.startsWith('#EXTM3U')) {
-        const origin = req.headers.origin || 'https://animei-snowy.vercel.app';
+      const buffer = await upstream.arrayBuffer();
+      const decoder = new TextDecoder();
+      const head = decoder.decode(buffer.slice(0, Math.min(16, buffer.byteLength)));
+      if (head.trimStart().startsWith('#EXTM3U')) {
+        const origin = req.headers.origin || `https://${req.headers.host}`;
         const proxyBase = `${origin}/api/proxy`;
         const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-        const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
+        const rewritten = rewriteM3U8(decoder.decode(buffer), targetUrl, proxyBase, encodedHeaders);
 
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Cache-Control', 'public, max-age=2');
         return res.send(rewritten);
       }
-      if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('image/')) {
+      if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
         return res.status(502).json({
           error: 'M3U8 URL returned non-video content',
           contentType,
           url: targetUrl,
         });
       }
-      return res.status(502).json({
-        error: 'M3U8 URL returned non-M3U8 content',
-        contentType,
-        url: targetUrl,
-      });
+      // Not a playlist: some CDNs label media segments (e.g. .ts) as image/jpeg.
+      // Forward the bytes so iOS/hls.js can demux them instead of rejecting.
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', contentType.includes('image/jpeg') ? 'video/mp2t' : (contentType || 'application/octet-stream'));
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Length', buffer.byteLength);
+      const contentRange = upstream.headers.get('content-range');
+      if (contentRange) res.setHeader('Content-Range', contentRange);
+      const status = upstream.status === 206 ? 206 : 200;
+      res.status(status);
+      return res.send(Buffer.from(buffer));
     }
 
     if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain') || contentType.includes('image/')) {
