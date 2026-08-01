@@ -18,6 +18,7 @@ export default function Watch() {
   const [anime, setAnime] = useState(null);
   const [episode, setEpisode] = useState(1);
   const [streamUrl, setStreamUrl] = useState('');
+  const [streamHeaders, setStreamHeaders] = useState({});
   const [streamLoading, setStreamLoading] = useState(false);
   const [streamError, setStreamError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +51,7 @@ export default function Watch() {
         const data = await getStreamUrl(title, episode);
         if (!cancelled) {
           setStreamUrl(data.m3u8 || data.embedUrl || '');
+          setStreamHeaders(data.m3u8Headers || {});
         }
       } catch {
         if (!cancelled) {
@@ -118,6 +120,7 @@ export default function Watch() {
               <div className="rounded-xl overflow-hidden glow-shadow">
                 <VideoPlayer
                   src={streamUrl}
+                  headers={streamHeaders}
                   poster={anime.bannerImage || anime.coverImage?.large}
                   title={`${title} - Episode ${episode}`}
                 />

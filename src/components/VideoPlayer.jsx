@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 
-export default function VideoPlayer({ src, poster, title }) {
+export default function VideoPlayer({ src, headers = {}, poster, title }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -19,6 +19,11 @@ export default function VideoPlayer({ src, poster, title }) {
   const [availableLevels, setAvailableLevels] = useState([]);
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
+  const headersRef = useRef(headers);
+
+  useEffect(() => {
+    headersRef.current = headers;
+  });
 
   const isEmbed = src && (src.includes('embed') || src.includes('echovideo') || (!src.includes('.m3u8') && !src.includes('hls') && !src.includes('.mp4')));
 
@@ -36,6 +41,11 @@ export default function VideoPlayer({ src, poster, title }) {
           maxBufferLength: 30,
           maxMaxBufferLength: 60,
           startLevel: -1,
+          xhrSetup: (xhr) => {
+            Object.entries(headersRef.current).forEach(([key, value]) => {
+              xhr.setRequestHeader(key, value);
+            });
+          },
         });
         hlsRef.current = hls;
 
