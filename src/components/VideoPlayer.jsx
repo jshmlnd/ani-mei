@@ -18,6 +18,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null);
   const [quality, setQuality] = useState(-1);
   const [availableLevels, setAvailableLevels] = useState([]);
   const [useIframe, setUseIframe] = useState(false);
@@ -64,6 +65,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       hlsRef.current.destroy();
     }
     hlsStartedRef.current = false;
+    setDebugInfo(null);
 
     if (isM3u8 && Hls.isSupported()) {
       const hls = new Hls({
@@ -114,6 +116,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
+          setDebugInfo({
+            url: data.url || src,
+            status: data.response?.code ?? null,
+            detail: data.details || data.type,
+            at: new Date().toLocaleTimeString(),
+          });
           if (fallbackSrc && hlsRetryRef.current >= MAX_HLS_RETRIES) {
             switchToIframe();
             return;
@@ -210,6 +218,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       const code = videoErr?.code;
       const message = videoErr?.message || 'unknown error';
       const detail = code ? ` (error code ${code}: ${message})` : '';
+      setDebugInfo({
+        url: src,
+        status: code ?? null,
+        detail: message,
+        at: new Date().toLocaleTimeString(),
+      });
       if (fallbackSrc) {
         switchToIframe();
       } else {
@@ -236,7 +250,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('error', onError);
     };
-  }, [fallbackSrc, shouldUseIframe, switchToIframe]);
+  }, [src, fallbackSrc, shouldUseIframe, switchToIframe]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -382,6 +396,14 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <AlertTriangle className="w-16 h-16 mx-auto text-red-400/60 mb-4" />
             <p className="text-white text-lg font-semibold mb-2">Video Unavailable</p>
             <p className="text-gray-400 text-sm mb-4">{error}</p>
+            {debugInfo && (
+              <div className="mb-4 p-3 bg-black/50 rounded-lg text-left text-[11px] font-mono text-gray-400 max-h-44 overflow-auto">
+                <p><span className="text-gray-500">Time:</span> {debugInfo.at}</p>
+                <p><span className="text-gray-500">Status:</span> {debugInfo.status ?? 'n/a'}</p>
+                <p className="break-all"><span className="text-gray-500">Detail:</span> {debugInfo.detail || 'n/a'}</p>
+                <p className="break-all"><span className="text-gray-500">URL:</span> {debugInfo.url || src}</p>
+              </div>
+            )}
             <div className="flex gap-2 justify-center">
               <button className="btn btn-sm btn-primary" onClick={() => { setError(null); setIsLoading(true); initHls(); }}>
                 Try Again
@@ -480,6 +502,14 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           showControls ? 'opacity-100' : 'opacity-0'
         }`}>
           <h2 className="text-white text-lg font-semibold">{title}</h2>
+        </div>
+      )}
+
+      {src && (
+        <div className={`absolute bottom-14 left-0 right-0 px-3 pb-1 transition-opacity duration-300 ${
+          showControls ? 'opacity-100' : 'opacity-0'
+        }`}>
+          <p className="text-[9px] font-mono text-white/40 truncate" title={src}>{src}</p>
         </div>
       )}
     </div>
