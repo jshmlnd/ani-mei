@@ -11,8 +11,9 @@ export default async function handler(req, res) {
   try {
     const upstream = await fetch(targetUrl, {
       headers: {
-        Referer: headers.Referer || 'https://play2.echovideo.ru/',
-        Origin: headers.Origin || 'https://play2.echovideo.ru',
+        'Referer': headers.Referer || 'https://play2.echovideo.ru/',
+        'Origin': headers.Origin || 'https://play2.echovideo.ru',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
     });
 
@@ -20,14 +21,18 @@ export default async function handler(req, res) {
       return res.status(upstream.status).json({ error: `Upstream ${upstream.status}` });
     }
 
+    const buffer = await upstream.arrayBuffer();
+    const firstBytes = new Uint8Array(buffer.slice(0, 16));
+    const textPreview = new TextDecoder().decode(firstBytes);
+    const isM3u8 = textPreview.trimStart().startsWith('#EXT');
+
     const contentType = upstream.headers.get('content-type') || '';
 
-    if (contentType.includes('mpegurl') || contentType.includes('m3u8') || targetUrl.includes('.m3u8')) {
-      const body = await upstream.text();
-      const origin = req.headers.origin || '*';
+    if (isM3u8) {
+      const body = new TextDecoder().decode(buffer);
+      const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || '';
       const proxyBase = `${origin}/api/proxy`;
       const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-
       const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
 
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -37,11 +42,9 @@ export default async function handler(req, res) {
     }
 
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Type', contentType || 'application/octet-stream');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-
-    const arrayBuf = await upstream.arrayBuffer();
-    return res.send(new Uint8Array(arrayBuf));
+    return res.send(new Uint8Array(buffer));
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
