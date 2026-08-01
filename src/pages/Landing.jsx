@@ -116,8 +116,8 @@ export default function Landing() {
           </nav>
 
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-white text-center mb-3 leading-tight">
-            Your Anime,{' '}
-            <span className="text-gradient">Streamed Free</span>
+            Made for my,{' '}
+            <span className="text-gradient" style={{ color: 'linear-gradient(135deg, #eeaeca, #e994c0)' }}>Jimei</span>
           </h1>
           <p className="text-[var(--text-secondary)] text-sm md:text-base text-center max-w-lg mb-8">
             Watch thousands of anime episodes in HD with no registration. New episodes added daily.
