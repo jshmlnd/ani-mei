@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { MonitorPlay, ChevronDown } from 'lucide-react';
 
 const PLAYERS = [
@@ -10,25 +11,41 @@ const PLAYERS = [
 
 export default function PlayerSelector({ value, onChange }) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState({});
   const ref = useRef(null);
 
   const stopPropagation = useCallback((e) => e.stopPropagation(), []);
 
+  const positionMenu = useCallback(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setMenuStyle({
+      position: 'fixed',
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+      zIndex: 99999,
+    });
+  }, []);
+
   useEffect(() => {
     if (!open) return;
+    positionMenu();
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') setOpen(false);
     };
+    const handleScroll = () => setOpen(false);
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('scroll', handleScroll, true);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('scroll', handleScroll, true);
     };
-  }, [open]);
+  }, [open, positionMenu]);
 
   const current = PLAYERS.find((p) => p.id === value) || PLAYERS[0];
 
@@ -44,10 +61,10 @@ export default function PlayerSelector({ value, onChange }) {
         <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          className="absolute bottom-full right-0 mb-2 w-48 bg-[var(--bg-surface)] rounded-xl shadow-2xl shadow-black/50 border border-white/[0.08] overflow-hidden animate-fade-in"
-          style={{ animationDuration: '0.15s', zIndex: 9999 }}
+          className="w-48 bg-[var(--bg-surface)] rounded-xl shadow-2xl shadow-black/50 border border-white/[0.08] overflow-hidden animate-fade-in"
+          style={{ ...menuStyle, animationDuration: '0.15s' }}
           onMouseDown={stopPropagation}
           onTouchStart={stopPropagation}
         >
@@ -67,7 +84,8 @@ export default function PlayerSelector({ value, onChange }) {
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

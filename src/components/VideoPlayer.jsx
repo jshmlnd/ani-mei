@@ -438,7 +438,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
-        style={{ overflow: 'visible' }}
       >
         <div className="px-4 pb-3">
           <div className="relative h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 group/progress hover:h-2.5 transition-all" onClick={seek}>
