@@ -146,8 +146,8 @@ const STREAM_ADAPTERS = {
 
 function parseStreamApiEntry(entry) {
   const match = entry.match(/^(animekai|123anime|hianime|anikoto):(.+)$/);
-  if (match) return { type: match[1], base: match[2].trim() };
-  return { type: '123anime', base: entry };
+  if (match) return { type: match[1], base: match[2].trim().replace(/\/+$/, '') };
+  return { type: '123anime', base: entry.trim().replace(/\/+$/, '') };
 }
 
 const MEDIA_FIELDS = `
