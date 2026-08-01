@@ -35,19 +35,13 @@ export async function onRequest(context) {
 
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
 
-    const needsRewrite = contentType.includes('mpegurl') ||
-      contentType.includes('m3u8') ||
-      (/\.m3u8($|\?)/i.test(targetUrl) && !contentType.includes('video'));
-
-    if (needsRewrite) {
+    if (contentType.includes('mpegurl') || contentType.includes('m3u8')) {
       const body = await upstream.text();
       const firstChars = body.trimStart().slice(0, 10);
       if (!firstChars.startsWith('#EXTM3U')) {
-        return new Response(body, {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': contentType || 'application/octet-stream',
-          },
+        return new Response(JSON.stringify({ error: 'Upstream returned non-M3U8 content', url: targetUrl }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' },
         });
       }
       const origin = reqUrl.origin;
@@ -62,6 +56,51 @@ export async function onRequest(context) {
           'Cache-Control': 'public, max-age=2',
         },
       });
+    }
+
+    if (/\.m3u8($|\?)/i.test(targetUrl)) {
+      const body = await upstream.text();
+      const firstChars = body.trimStart().slice(0, 10);
+      if (firstChars.startsWith('#EXTM3U')) {
+        const origin = reqUrl.origin;
+        const proxyBase = `${origin}/api/proxy`;
+        const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
+        const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
+
+        return new Response(rewritten, {
+          headers: {
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=2',
+          },
+        });
+      }
+    }
+
+    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
+      return new Response(JSON.stringify({
+        error: 'Upstream returned non-video content',
+        contentType,
+        url: targetUrl,
+      }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!contentType.includes('video') && !contentType.includes('octet-stream') && !contentType.includes('mpeg') && !contentType.includes('mp2t')) {
+      const preview = await upstream.clone().text().catch(() => '');
+      if (preview.startsWith('{') || preview.startsWith('[') || preview.startsWith('<')) {
+        return new Response(JSON.stringify({
+          error: 'Upstream returned non-video content',
+          contentType,
+          url: targetUrl,
+          preview: preview.slice(0, 200),
+        }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     return new Response(upstream.body, {

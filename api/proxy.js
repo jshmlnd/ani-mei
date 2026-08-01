@@ -27,17 +27,11 @@ export default async function handler(req, res) {
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
     const contentLength = upstream.headers.get('content-length');
 
-    const needsRewrite = contentType.includes('mpegurl') ||
-      contentType.includes('m3u8') ||
-      (/\.m3u8($|\?)/i.test(targetUrl) && !contentType.includes('video'));
-
-    if (needsRewrite) {
+    if (contentType.includes('mpegurl') || contentType.includes('m3u8')) {
       const body = await upstream.text();
       const firstChars = body.trimStart().slice(0, 10);
       if (!firstChars.startsWith('#EXTM3U')) {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', contentType || 'application/octet-stream');
-        return res.send(body);
+        return res.status(502).json({ error: 'Upstream returned non-M3U8 content', url: targetUrl });
       }
       const origin = req.headers.origin || 'https://animei-snowy.vercel.app';
       const proxyBase = `${origin}/api/proxy`;
@@ -48,6 +42,42 @@ export default async function handler(req, res) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'public, max-age=2');
       return res.send(rewritten);
+    }
+
+    if (/\.m3u8($|\?)/i.test(targetUrl)) {
+      const body = await upstream.text();
+      const firstChars = body.trimStart().slice(0, 10);
+      if (firstChars.startsWith('#EXTM3U')) {
+        const origin = req.headers.origin || 'https://animei-snowy.vercel.app';
+        const proxyBase = `${origin}/api/proxy`;
+        const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
+        const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
+
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'public, max-age=2');
+        return res.send(rewritten);
+      }
+    }
+
+    if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
+      return res.status(502).json({
+        error: 'Upstream returned non-video content',
+        contentType,
+        url: targetUrl,
+      });
+    }
+
+    if (!contentType.includes('video') && !contentType.includes('octet-stream') && !contentType.includes('mpeg') && !contentType.includes('mp2t')) {
+      const preview = await upstream.clone().text().catch(() => '');
+      if (preview.startsWith('{') || preview.startsWith('[') || preview.startsWith('<')) {
+        return res.status(502).json({
+          error: 'Upstream returned non-video content',
+          contentType,
+          url: targetUrl,
+          preview: preview.slice(0, 200),
+        });
+      }
     }
 
     res.setHeader('Access-Control-Allow-Origin', '*');
