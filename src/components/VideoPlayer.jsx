@@ -38,6 +38,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   const getProxyUrl = useCallback((targetUrl) => {
     const proxyBase = '/api/proxy';
+    if (targetUrl.startsWith(proxyBase + '?')) return targetUrl;
     const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
     return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
   }, []);
@@ -166,8 +167,9 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   }, [src, shouldUseIframe, isM3u8, fallbackSrc, getProxyUrl, switchToIframe]);
 
   useEffect(() => {
-    initHls();
+    const t = setTimeout(initHls, 0);
     return () => {
+      clearTimeout(t);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;

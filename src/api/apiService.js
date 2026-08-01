@@ -6,12 +6,6 @@ const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || '')
   .map((s) => s.trim())
   .filter(Boolean);
 
-const PROXY_BASE = '/api/proxy';
-
-function proxyUrl(targetUrl) {
-  return `${PROXY_BASE}?url=${encodeURIComponent(targetUrl)}`;
-}
-
 const STREAM_ADAPTERS = {
   animekai: {
     async search(base, keyword) {
@@ -47,7 +41,7 @@ const STREAM_ADAPTERS = {
       if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
 
       return {
-        m3u8: proxyUrl(m3u8),
+        m3u8,
         embedUrl: srcData.embed_url || '',
         m3u8Headers: {},
         skipIntro: srcData.skip?.intro || null,
@@ -76,7 +70,7 @@ const STREAM_ADAPTERS = {
       const embedUrl = data.data.streaming_link || '';
       if (m3u8 && m3u8.includes('.m3u8')) {
         return {
-          m3u8: proxyUrl(m3u8),
+          m3u8,
           embedUrl,
           m3u8Headers: data.data.m3u8_headers || {},
         };
@@ -114,7 +108,7 @@ const STREAM_ADAPTERS = {
       const m3u8 = data.data.link?.file || '';
       if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
-        m3u8: proxyUrl(m3u8),
+        m3u8,
         embedUrl: m3u8,
         m3u8Headers: {},
       };
@@ -144,7 +138,7 @@ const STREAM_ADAPTERS = {
       const m3u8 = source.file || '';
       if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
       return {
-        m3u8: proxyUrl(m3u8),
+        m3u8,
         embedUrl: m3u8,
         m3u8Headers: {},
       };
