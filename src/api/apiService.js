@@ -6,6 +6,94 @@ const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || 'https://123an
   .map((s) => s.trim())
   .filter(Boolean);
 
+const STREAM_ADAPTERS = {
+  '123anime': {
+    async search(base, keyword) {
+      const { data: results } = await axios.get(`${base}/search?keyword=${encodeURIComponent(keyword)}`, { timeout: 15000 });
+      if (!results?.length) return [];
+      return results.map((r) => ({
+        id: r.japanese_title
+          ?.toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || '',
+        title: r.title || '',
+        type: r.type || 'sub',
+      }));
+    },
+    async getStream(base, animeId, episode) {
+      const streamUrl = `${base}/episode-stream?id=${encodeURIComponent(animeId)}&ep=${episode}`;
+      const { data } = await axios.get(streamUrl, { timeout: 20000 });
+      if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
+      return {
+        embedUrl: data.data.streaming_link || '',
+        m3u8: data.data.direct_m3u8 || '',
+        m3u8Headers: data.data.m3u8_headers || {},
+      };
+    },
+  },
+  hianime: {
+    async search(base, keyword) {
+      const { data } = await axios.get(`${base}/api/v1/search?keyword=${encodeURIComponent(keyword)}&page=1`, { timeout: 15000 });
+      if (!data?.success || !data?.data?.animes?.length) return [];
+      return data.data.animes.map((r) => ({
+        id: r.id || '',
+        title: r.title || r.alternativeTitle || '',
+        type: 'sub',
+      }));
+    },
+    async getStream(base, animeId, episode) {
+      const epListUrl = `${base}/api/v1/episodes/${animeId}`;
+      const { data: epData } = await axios.get(epListUrl, { timeout: 15000 });
+      if (!epData?.success || !epData?.data?.episodes?.length) throw new Error('Episode list not found');
+      const epId = epData.data.episodes.find((e) => e.episodeNumber === parseInt(episode))?.id
+        || epData.data.episodes[Math.min(parseInt(episode) - 1, epData.data.episodes.length - 1)]?.id;
+      if (!epId) throw new Error('Episode not found');
+      const streamUrl = `${base}/api/v1/stream?id=${encodeURIComponent(epId)}&server=hd-1&type=sub`;
+      const { data } = await axios.get(streamUrl, { timeout: 20000 });
+      if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
+      return {
+        embedUrl: data.data.link?.file || '',
+        m3u8: data.data.link?.file || '',
+        m3u8Headers: {},
+      };
+    },
+  },
+  anikoto: {
+    async search(base, keyword) {
+      const { data } = await axios.get(`${base}/api/search?q=${encodeURIComponent(keyword)}`, { timeout: 15000 });
+      if (!data?.success || !data?.data?.length) return [];
+      return data.data.map((r) => ({
+        id: r.id || '',
+        title: r.title || '',
+        type: 'sub',
+      }));
+    },
+    async getStream(base, animeId, episode) {
+      const epListUrl = `${base}/api/episodes/${animeId}`;
+      const { data: epData } = await axios.get(epListUrl, { timeout: 15000 });
+      if (!epData?.success || !epData?.data?.episodes?.length) throw new Error('Episode list not found');
+      const epId = epData.data.episodes.find((e) => e.number === parseInt(episode))?.id
+        || epData.data.episodes[Math.min(parseInt(episode) - 1, epData.data.episodes.length - 1)]?.id;
+      if (!epId) throw new Error('Episode not found');
+      const streamUrl = `${base}/api/stream/${epId}?server=hd-1`;
+      const { data } = await axios.get(streamUrl, { timeout: 20000 });
+      if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
+      const source = data.data.sources?.[0] || {};
+      return {
+        embedUrl: source.file || '',
+        m3u8: source.file || '',
+        m3u8Headers: {},
+      };
+    },
+  },
+};
+
+function parseStreamApiEntry(entry) {
+  const match = entry.match(/^(123anime|hianime|anikoto):(.+)$/);
+  if (match) return { type: match[1], base: match[2].trim() };
+  return { type: '123anime', base: entry };
+}
+
 const MEDIA_FIELDS = `
   id
   title { romaji english native }
@@ -191,39 +279,26 @@ export function getEpisodeCount(media) {
 export async function getStreamUrl(animeTitle, episode) {
   let lastError;
 
-  for (const base of STREAM_API_BASES) {
+  for (const entry of STREAM_API_BASES) {
+    const { type, base } = parseStreamApiEntry(entry);
+    const adapter = STREAM_ADAPTERS[type];
+    if (!adapter) {
+      console.warn(`Unknown stream API type: ${type}`);
+      continue;
+    }
     try {
-      const searchUrl = `${base}/search?keyword=${encodeURIComponent(animeTitle)}`;
-      const { data: results } = await axios.get(searchUrl, { timeout: 15000 });
-      if (!results?.length) {
-        throw new Error('Anime not found on streaming source');
-      }
+      const results = await adapter.search(base, animeTitle);
+      if (!results.length) throw new Error('Anime not found');
 
       const lower = animeTitle.toLowerCase();
-      const best = results.find(
-        (r) => r.type === 'sub' && r.title.toLowerCase().includes(lower)
-      ) || results.find((r) => r.type === 'sub') || results[0];
+      const best = results.find((r) => r.title.toLowerCase().includes(lower)) || results[0];
 
-      const slug = best.japanese_title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
+      if (!best.id) throw new Error('No valid anime ID');
 
-      const streamUrl = `${base}/episode-stream?id=${encodeURIComponent(slug)}&ep=${episode}`;
-      const { data } = await axios.get(streamUrl, { timeout: 20000 });
-
-      if (!data?.success || !data?.data) {
-        throw new Error('Failed to get stream URL');
-      }
-
-      return {
-        embedUrl: data.data.streaming_link || '',
-        m3u8: data.data.direct_m3u8 || '',
-        m3u8Headers: data.data.m3u8_headers || {},
-      };
+      return await adapter.getStream(base, best.id, episode);
     } catch (err) {
       lastError = err;
-      console.warn(`Stream API failed for ${base}:`, err.message);
+      console.warn(`Stream API (${type}) failed for ${base}:`, err.message);
     }
   }
 
