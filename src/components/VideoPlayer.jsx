@@ -40,6 +40,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const getProxyUrl = useCallback((targetUrl) => {
     const proxyBase = '/api/proxy';
     if (targetUrl.startsWith(proxyBase + '?')) return targetUrl;
+    try {
+      const u = new URL(targetUrl);
+      if (u.hostname === 'stream.animeparadise.moe') return targetUrl;
+    } catch {
+      /* non-URL */
+    }
     const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
     return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
   }, []);

@@ -1,10 +1,17 @@
 import axios from 'axios';
 
 const ANILIST_API = import.meta.env.VITE_ANILIST_API || 'https://graphql.anilist.co';
-const STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || '')
+const ENV_STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+
+const ANIMEPARADISE_ENTRY = 'animeparadise:https://api.animeparadise.moe';
+
+const STREAM_API_BASES = [
+  ...ENV_STREAM_API_BASES,
+  ...(ENV_STREAM_API_BASES.includes(ANIMEPARADISE_ENTRY) ? [] : [ANIMEPARADISE_ENTRY]),
+];
 
 const STREAM_ADAPTERS = {
   animekai: {
@@ -156,6 +163,46 @@ const STREAM_ADAPTERS = {
       };
     },
   },
+  animeparadise: {
+    async search(base, keyword) {
+      const { data } = await axios.get(`${base}/search?q=${encodeURIComponent(keyword)}`, { timeout: 15000 });
+      if (!data?.success || !data?.data?.length) return [];
+      const lower = keyword.toLowerCase();
+      const score = (title) => {
+        const tl = (title || '').toLowerCase();
+        if (tl === lower) return 0;
+        if (tl.startsWith(lower)) return 1;
+        if (tl.includes(lower)) return 2;
+        return 3;
+      };
+      const best = [...data.data].sort((a, b) => score(a.title) - score(b.title))[0];
+      if (!best?.link) return [];
+      return [{ id: best.link, title: best.title || '', type: 'sub' }];
+    },
+    async getStream(base, animeId, episode) {
+      const { data: info } = await axios.get(`${base}/anime/${animeId}`, { timeout: 15000 });
+      if (!info?.success || !info?.data?._id) throw new Error('Anime info not found');
+      const origin = info.data._id;
+
+      const { data: eps } = await axios.get(`${base}/anime/${origin}/episode`, { timeout: 15000 });
+      if (!eps?.success || !eps?.data?.length) throw new Error('Episode list not found');
+      const ep = eps.data.find((e) => String(e.number) === String(episode))
+        || eps.data[Math.min(parseInt(episode) - 1, eps.data.length - 1)];
+      if (!ep?.uid) throw new Error('Episode not found');
+
+      const proxyBase = typeof window !== 'undefined' ? window.location.origin : '';
+      const { data } = await axios.get(
+        `${proxyBase}/api/animeparadise?uid=${encodeURIComponent(ep.uid)}&origin=${encodeURIComponent(origin)}`,
+        { timeout: 30000 },
+      );
+      if (!data?.success || !data?.m3u8) throw new Error('Failed to get stream');
+      return {
+        m3u8: data.m3u8,
+        embedUrl: data.m3u8,
+        m3u8Headers: {},
+      };
+    },
+  },
 };
 
 async function extractPlayerCdnM3u8(embedUrl) {
@@ -207,7 +254,7 @@ async function extractPlayerCdnM3u8(embedUrl) {
 }
 
 function parseStreamApiEntry(entry) {
-  const match = entry.match(/^(animekai|123anime|hianime|anikoto):(.+)$/);
+  const match = entry.match(/^(animekai|123anime|hianime|anikoto|animeparadise):(.+)$/);
   if (match) return { type: match[1], base: match[2].trim().replace(/\/+$/, '') };
   return { type: '123anime', base: entry.trim().replace(/\/+$/, '') };
 }
