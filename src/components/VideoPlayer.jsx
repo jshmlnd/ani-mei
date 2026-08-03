@@ -296,14 +296,24 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   }, []);
 
   const toggleFullscreen = useCallback(() => {
+    const video = videoRef.current;
     const container = containerRef.current;
-    if (!container) return;
-    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+    if (!video && !container) return;
+
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+
+    if (isFs) {
       const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
       if (exit) exit.call(document);
+      return;
+    }
+
+    if (video.webkitEnterFullscreen) {
+      video.webkitEnterFullscreen();
     } else {
-      const req = container.requestFullscreen || container.webkitRequestFullscreen || container.mozRequestFullScreen || container.msRequestFullscreen;
-      if (req) req.call(container);
+      const el = video.requestFullscreen ? video : container;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (req) req.call(el);
     }
   }, []);
 
@@ -417,6 +427,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         poster={poster}
         onClick={togglePlay}
         playsInline
+        webkit-playsinline="true"
+        x-webkit-airplay="allow"
         style={{ touchAction: 'manipulation' }}
       />
 
@@ -457,6 +469,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 pb-3">
           <div className="relative h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 group/progress hover:h-2.5 transition-all" onClick={seek}>
