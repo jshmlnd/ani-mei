@@ -134,7 +134,6 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-[var(--bg-deep)] to-transparent pointer-events-none" />
             </div>
           </AnimeRow>
         )}
