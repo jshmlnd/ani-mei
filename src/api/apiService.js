@@ -1,262 +1,75 @@
 import axios from 'axios';
 
 const ANILIST_API = import.meta.env.VITE_ANILIST_API || 'https://graphql.anilist.co';
-const ENV_STREAM_API_BASES = (import.meta.env.VITE_STREAM_API_BASE || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+const STREAM_API = 'https://animeiapi.joshuaklein-malonda.workers.dev';
 
-const ANIMEPARADISE_ENTRY = 'animeparadise:https://api.animeparadise.moe';
+const PROXY_BASE = '/api/proxy';
 
-function slugify(s) {
-  return (s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+function proxyUrl(targetUrl, extra = '') {
+  return `${PROXY_BASE}?url=${encodeURIComponent(targetUrl)}${extra}`;
 }
 
-const STREAM_API_BASES = [
-  ...ENV_STREAM_API_BASES,
-  ...(ENV_STREAM_API_BASES.includes(ANIMEPARADISE_ENTRY) ? [] : [ANIMEPARADISE_ENTRY]),
-];
+function rawProxyUrl(targetUrl) {
+  return proxyUrl(targetUrl, '&raw=1');
+}
 
-const STREAM_ADAPTERS = {
-  animekai: {
-    async search(base, keyword) {
-      const { data } = await axios.get(`${base}/api/search?keyword=${encodeURIComponent(keyword)}`, { timeout: 15000 });
-      if (!data?.success || !data?.results?.length) return [];
-      return data.results.map((r) => ({
-        id: r.slug || '',
-        title: r.title || '',
-        type: 'sub',
-      }));
-    },
-    async getStream(base, animeId, episode) {
-      const { data: infoData } = await axios.get(`${base}/api/anime/${animeId}`, { timeout: 15000 });
-      if (!infoData?.success || !infoData?.ani_id) throw new Error('Anime info not found');
+async function extractM3u8FromEmbed(embedUrl) {
+  const { data: html } = await axios.get(rawProxyUrl(embedUrl), {
+    timeout: 10000,
+    responseType: 'text',
+    transformResponse: [(d) => d],
+  });
+  const match = html.match(/"sourceUrl"\s*:\s*"([^"]+)"/);
+  if (!match) return null;
+  const sourceUrl = match[1].startsWith('http')
+    ? match[1]
+    : `${new URL(embedUrl).origin}${match[1]}`;
+  const { data: sourceData } = await axios.get(rawProxyUrl(sourceUrl), {
+    timeout: 10000,
+    headers: { Accept: 'application/json' },
+  });
+  if (sourceData?.status === 'ok' && sourceData?.source) {
+    return sourceData.source;
+  }
+  return null;
+}
 
-      const { data: epData } = await axios.get(`${base}/api/episodes/${infoData.ani_id}`, { timeout: 15000 });
-      if (!epData?.success || !epData?.episodes?.length) throw new Error('Episode list not found');
-      const ep = epData.episodes.find((e) => String(e.number) === String(episode))
-        || epData.episodes[Math.min(parseInt(episode) - 1, epData.episodes.length - 1)];
-      if (!ep?.token) throw new Error('Episode not found');
+async function searchStream(keyword) {
+  const { data } = await axios.get(
+    `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`,
+    { timeout: 15000 }
+  );
+  if (!data?.success || !data?.data?.length) return [];
+  return data.data.map((r) => ({
+    id: r.slug || '',
+    title: r.title?.replace(/&#\d+;/g, (m) => String.fromCharCode(parseInt(m.slice(2, -1)))) || '',
+    type: r.type || 'sub',
+  }));
+}
 
-      const { data: srvData } = await axios.get(`${base}/api/servers/${ep.token}`, { timeout: 15000 });
-      if (!srvData?.success) throw new Error('Servers not found');
-      const subServers = srvData.servers?.sub || srvData.servers?.softsub || [];
-      if (!subServers.length) throw new Error('No servers available');
-      const linkId = subServers[0].link_id;
-      if (!linkId) throw new Error('No link ID');
+async function getStream(slug, episode) {
+  const { data: streamData } = await axios.get(
+    `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`,
+    { timeout: 20000 }
+  );
+  if (!streamData?.success || !streamData?.data) throw new Error('Failed to get stream');
 
-      const { data: srcData } = await axios.get(`${base}/api/source/${linkId}`, { timeout: 20000 });
-      if (!srcData?.success) throw new Error('Stream source not found');
-      const source = srcData.sources?.find((s) => s.file?.includes('.m3u8')) || srcData.sources?.[0] || {};
-      const m3u8 = source.file || '';
-      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
+  const embedUrl = streamData.data.streaming_link || '';
 
-      return {
-        m3u8,
-        embedUrl: srcData.embed_url || '',
-        m3u8Headers: {},
-        skipIntro: srcData.skip?.intro || null,
-        skipOutro: srcData.skip?.outro || null,
-      };
-    },
-  },
-  '123anime': {
-    async search(base, keyword) {
-      const directId = slugify(keyword);
-      if (!directId) return [];
-      return [{ id: directId, title: keyword, type: 'sub' }];
-    },
-    async getStream(base, animeId, episode) {
-      const streamUrl = `${base}/episode-stream?id=${encodeURIComponent(animeId)}&ep=${episode}`;
-      const { data } = await axios.get(streamUrl, { timeout: 20000 });
-      if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
-      const m3u8 = data.data.direct_m3u8 || '';
-      const embedUrl = data.data.streaming_link || '';
-      if (m3u8 && m3u8.includes('.m3u8')) {
+  if (embedUrl) {
+    try {
+      const m3u8Url = await extractM3u8FromEmbed(embedUrl);
+      if (m3u8Url) {
         return {
-          m3u8,
-          embedUrl,
-          m3u8Headers: data.data.m3u8_headers || {},
-        };
-      }
-      if (embedUrl) {
-        try {
-          const extracted = await extractPlayerCdnM3u8(embedUrl);
-          if (extracted?.m3u8) {
-            return {
-              m3u8: extracted.m3u8,
-              embedUrl,
-              m3u8Headers: { Referer: extracted.referer },
-            };
-          }
-        } catch (err) {
-          console.warn('PlayerCDN extraction failed, falling back to embed:', err.message);
-        }
-        return {
-          m3u8: embedUrl,
+          m3u8: proxyUrl(m3u8Url),
           embedUrl,
           m3u8Headers: {},
         };
       }
-      throw new Error('No valid m3u8 URL');
-    },
-  },
-  hianime: {
-    async search(base, keyword) {
-      const { data } = await axios.get(`${base}/api/v1/search?keyword=${encodeURIComponent(keyword)}&page=1`, { timeout: 15000 });
-      if (!data?.success || !data?.data?.animes?.length) return [];
-      return data.data.animes.map((r) => ({
-        id: r.id || '',
-        title: r.title || r.alternativeTitle || '',
-        type: 'sub',
-      }));
-    },
-    async getStream(base, animeId, episode) {
-      const epListUrl = `${base}/api/v1/episodes/${animeId}`;
-      const { data: epData } = await axios.get(epListUrl, { timeout: 15000 });
-      if (!epData?.success || !epData?.data?.episodes?.length) throw new Error('Episode list not found');
-      const epId = epData.data.episodes.find((e) => e.episodeNumber === parseInt(episode))?.id
-        || epData.data.episodes[Math.min(parseInt(episode) - 1, epData.data.episodes.length - 1)]?.id;
-      if (!epId) throw new Error('Episode not found');
-      const streamUrl = `${base}/api/v1/stream?id=${encodeURIComponent(epId)}&server=hd-1&type=sub`;
-      const { data } = await axios.get(streamUrl, { timeout: 20000 });
-      if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
-      const m3u8 = data.data.link?.file || '';
-      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
-      return {
-        m3u8,
-        embedUrl: m3u8,
-        m3u8Headers: {},
-      };
-    },
-  },
-  anikoto: {
-    async search(base, keyword) {
-      const { data } = await axios.get(`${base}/api/search?q=${encodeURIComponent(keyword)}`, { timeout: 15000 });
-      if (!data?.success || !data?.data?.length) return [];
-      return data.data.map((r) => ({
-        id: r.id || '',
-        title: r.title || '',
-        type: 'sub',
-      }));
-    },
-    async getStream(base, animeId, episode) {
-      const epListUrl = `${base}/api/episodes/${animeId}`;
-      const { data: epData } = await axios.get(epListUrl, { timeout: 15000 });
-      if (!epData?.success || !epData?.data?.episodes?.length) throw new Error('Episode list not found');
-      const epId = epData.data.episodes.find((e) => e.number === parseInt(episode))?.id
-        || epData.data.episodes[Math.min(parseInt(episode) - 1, epData.data.episodes.length - 1)]?.id;
-      if (!epId) throw new Error('Episode not found');
-      const streamUrl = `${base}/api/stream/${epId}?server=hd-1`;
-      const { data } = await axios.get(streamUrl, { timeout: 20000 });
-      if (!data?.success || !data?.data) throw new Error('Failed to get stream URL');
-      const source = data.data.sources?.[0] || {};
-      const m3u8 = source.file || '';
-      if (!m3u8 || !m3u8.includes('.m3u8')) throw new Error('No valid m3u8 URL');
-      return {
-        m3u8,
-        embedUrl: m3u8,
-        m3u8Headers: {},
-      };
-    },
-  },
-  animeparadise: {
-    async search(base, keyword) {
-      const { data } = await axios.get(`${base}/search?q=${encodeURIComponent(keyword)}`, { timeout: 15000 });
-      if (!data?.success || !data?.data?.length) return [];
-      const lower = keyword.toLowerCase();
-      const score = (title) => {
-        const tl = (title || '').toLowerCase();
-        if (tl === lower) return 0;
-        if (tl.startsWith(lower)) return 1;
-        if (tl.includes(lower)) return 2;
-        return 3;
-      };
-      const best = [...data.data].sort((a, b) => score(a.title) - score(b.title))[0];
-      if (!best?.link) return [];
-      return [{ id: best.link, title: best.title || '', type: 'sub' }];
-    },
-    async getStream(base, animeId, episode) {
-      const { data: info } = await axios.get(`${base}/anime/${animeId}`, { timeout: 15000 });
-      if (!info?.success || !info?.data?._id) throw new Error('Anime info not found');
-      const origin = info.data._id;
-
-      const { data: eps } = await axios.get(`${base}/anime/${origin}/episode`, { timeout: 15000 });
-      if (!eps?.success || !eps?.data?.length) throw new Error('Episode list not found');
-      const ep = eps.data.find((e) => String(e.number) === String(episode))
-        || eps.data[Math.min(parseInt(episode) - 1, eps.data.length - 1)];
-      if (!ep?.uid) throw new Error('Episode not found');
-
-      const proxyBase = typeof window !== 'undefined' ? window.location.origin : '';
-      const { data } = await axios.get(
-        `${proxyBase}/api/animeparadise?uid=${encodeURIComponent(ep.uid)}&origin=${encodeURIComponent(origin)}`,
-        { timeout: 30000 },
-      );
-      if (!data?.success || !data?.m3u8) throw new Error('Failed to get stream');
-      return {
-        m3u8: data.m3u8,
-        embedUrl: '',
-        m3u8Headers: {},
-      };
-    },
-  },
-};
-
-async function extractPlayerCdnM3u8(embedUrl) {
-  if (typeof window === 'undefined' || typeof fetch !== 'function') {
-    throw new Error('PlayerCDN extraction requires a browser');
+    } catch {}
   }
-  let url;
-  try {
-    url = new URL(embedUrl);
-  } catch {
-    throw new Error('Invalid embed URL');
-  }
-  const outer = url.pathname.split('/').filter(Boolean).pop();
-  if (!outer) throw new Error('No embed token');
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
-  try {
-    const hsRes = await fetch(`${url.origin}/hs/${outer}`, { signal: controller.signal });
-    if (!hsRes.ok) throw new Error(`Player page ${hsRes.status}`);
-    const hsHtml = await hsRes.text();
-    const dataId = hsHtml.match(/id="mg-player" data-id="([^"]+)"/)?.[1];
-    if (!dataId) throw new Error('No data-id in player page');
-
-    const srcRes = await fetch(`https://play2.echovideo.ru/getSources?id=${dataId}`, { signal: controller.signal });
-    const raw = await srcRes.text();
-    if (!raw || raw.trim() === '404') throw new Error('getSources rejected');
-
-    let file = null;
-    try {
-      const json = JSON.parse(raw);
-      const root = json?.data && Array.isArray(json.data.sources) ? json.data : json;
-      const sources = root?.sources || [];
-      file = sources.find((s) => typeof s.file === 'string' && s.file.includes('.m3u8'))?.file
-        || sources[0]?.file || null;
-    } catch {
-      /* not JSON */
-    }
-    if (!file) {
-      const m = raw.match(/"file"\s*:\s*"([^"]+\.m3u8[^"]*)"/)
-        || raw.match(/(https?:\/\/[^"' ]+\.m3u8[^"' ]*)/);
-      file = m ? m[1] : null;
-    }
-    if (!file || !file.includes('.m3u8')) throw new Error('No m3u8 in sources');
-    return { m3u8: file, referer: url.origin + '/' };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function parseStreamApiEntry(entry) {
-  const match = entry.match(/^(animekai|123anime|hianime|anikoto|animeparadise):(.+)$/);
-  if (match) return { type: match[1], base: match[2].trim().replace(/\/+$/, '') };
-  return { type: '123anime', base: entry.trim().replace(/\/+$/, '') };
+  return { m3u8: '', embedUrl, m3u8Headers: {} };
 }
 
 const MEDIA_FIELDS = `
@@ -442,48 +255,13 @@ export function getEpisodeCount(media) {
 }
 
 export async function getStreamUrl(animeTitle, episode) {
-  let lastError;
-  let embedFallback;
+  const results = await searchStream(animeTitle);
+  if (!results.length) throw new Error('Anime not found on streaming source');
 
-  for (const entry of STREAM_API_BASES) {
-    const { type, base } = parseStreamApiEntry(entry);
-    const adapter = STREAM_ADAPTERS[type];
-    if (!adapter) {
-      console.warn(`Unknown stream API type: ${type}`);
-      continue;
-    }
-    try {
-      const results = await adapter.search(base, animeTitle);
-      if (!results.length) throw new Error('Anime not found');
+  const lower = animeTitle.toLowerCase();
+  const best = results.find((r) => r.title.toLowerCase().includes(lower)) || results[0];
 
-      let firstEmbed;
-      for (const candidate of results) {
-        if (!candidate?.id) continue;
-        let stream;
-        try {
-          stream = await adapter.getStream(base, candidate.id, episode);
-        } catch {
-          continue;
-        }
-        if (!stream?.m3u8) continue;
+  if (!best.id) throw new Error('No valid anime ID');
 
-        const hasDirect = stream.m3u8.includes('.m3u8') || stream.m3u8.includes('/m3u8') || stream.m3u8.includes('.mp4');
-        if (hasDirect) return stream;
-        firstEmbed = firstEmbed || stream;
-      }
-      if (firstEmbed) {
-        console.warn(`Stream API (${type}) returned embed-only results, deferring to fallback`);
-        embedFallback = embedFallback || firstEmbed;
-        continue;
-      }
-      throw new Error('No direct stream returned');
-    } catch (err) {
-      lastError = err;
-      console.warn(`Stream API (${type}) failed for ${base}:`, err.message);
-    }
-  }
-
-  if (embedFallback) return embedFallback;
-
-  throw lastError || new Error('No stream API available');
+  return await getStream(best.id, episode);
 }

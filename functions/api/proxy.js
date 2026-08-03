@@ -3,6 +3,7 @@ export async function onRequest(context) {
   const reqUrl = new URL(request.url);
   const url = reqUrl.searchParams.get('url');
   const h = reqUrl.searchParams.get('h');
+  const raw = reqUrl.searchParams.get('raw');
 
   if (!url) {
     return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
@@ -16,14 +17,15 @@ export async function onRequest(context) {
 
   try {
     const fetchHeaders = {
-      'Referer': headers.Referer || 'https://play2.echovideo.ru/',
-      'Origin': headers.Origin || 'https://play2.echovideo.ru',
+      'Referer': headers.Referer || 'https://megavid.buzz/',
+      'Origin': headers.Origin || 'https://megavid.buzz',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
     };
     if (headers.Range) fetchHeaders['Range'] = headers.Range;
     if (headers['Accept-Ranges']) fetchHeaders['Accept-Ranges'] = headers['Accept-Ranges'];
+    if (headers.Accept) fetchHeaders['Accept'] = headers.Accept;
 
     const upstream = await fetch(targetUrl, { headers: fetchHeaders });
 
@@ -40,20 +42,29 @@ export async function onRequest(context) {
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
     const contentLength = upstream.headers.get('content-length');
 
+    if (raw === '1') {
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': contentType || 'application/octet-stream',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     const isLikelyM3u8 = contentType.includes('mpegurl') || contentType.includes('m3u8')
       || /\.m3u8($|\?)/i.test(targetUrl)
-      || contentType.includes('image/jpeg')
-      || /stream\.animeparadise\.moe/i.test(targetUrl);
+      || contentType.includes('image/jpeg');
 
     if (isLikelyM3u8) {
-      const buffer = await upstream.arrayBuffer();
-      const decoder = new TextDecoder();
-      const head = decoder.decode(buffer.slice(0, Math.min(16, buffer.byteLength)));
-      if (head.trimStart().startsWith('#EXTM3U')) {
+      const body = await upstream.text();
+      const firstChars = body.trimStart().slice(0, 10);
+      if (firstChars.startsWith('#EXTM3U')) {
         const origin = reqUrl.origin;
         const proxyBase = `${origin}/api/proxy`;
         const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-        const rewritten = rewriteM3U8(decoder.decode(buffer), targetUrl, proxyBase, encodedHeaders);
+        const rewritten = rewriteM3U8(body, targetUrl, proxyBase, encodedHeaders);
 
         return new Response(rewritten, {
           headers: {
@@ -73,19 +84,14 @@ export async function onRequest(context) {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      // Not a playlist: some CDNs label media segments (e.g. .ts) as image/jpeg.
-      // Forward the bytes so iOS/hls.js can demux them instead of rejecting.
-      const respHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': contentType.includes('image/jpeg') ? 'video/mp2t' : (contentType || 'application/octet-stream'),
-        'Cache-Control': 'public, max-age=86400',
-        'Accept-Ranges': 'bytes',
-        'Content-Length': String(buffer.byteLength),
-      };
-      const contentRange = upstream.headers.get('content-range');
-      if (contentRange) respHeaders['Content-Range'] = contentRange;
-      const status = upstream.status === 206 ? 206 : 200;
-      return new Response(buffer, { status, headers: respHeaders });
+      return new Response(JSON.stringify({
+        error: 'M3U8 URL returned non-M3U8 content',
+        contentType,
+        url: targetUrl,
+      }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {

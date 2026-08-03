@@ -17,9 +17,6 @@
   "functions": {
     "api/proxy.js": {
       "maxDuration": 30
-    },
-    "api/animeparadise.js": {
-      "maxDuration": 30
     }
   }
 }
