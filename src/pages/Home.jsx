@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   getTrendingAnime,
@@ -9,7 +9,7 @@ import {
 import HeroCarousel from '../components/HeroCarousel';
 import AnimeCard from '../components/AnimeCard';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { ChevronRight, AlertCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react';
 
 function AnimeRow({ title, subtitle, linkTo, linkText, children }) {
   return (
@@ -51,6 +51,7 @@ export default function Home() {
   const [topRated, setTopRated] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const recentScrollRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -126,14 +127,26 @@ export default function Home() {
             linkTo="/search?type=NEW"
             linkText="View All"
           >
-            <div className="relative -mx-4 px-4">
-              <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
+            <div className="relative group/scroll">
+              <div ref={recentScrollRef} className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide scroll-smooth">
                 {recent.map((anime) => (
                   <div key={anime.id} className="flex-none w-[140px] md:w-[170px]">
                     <AnimeCard anime={anime} />
                   </div>
                 ))}
               </div>
+              <button
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-opacity hover:bg-black/90"
+                onClick={() => recentScrollRef.current?.scrollBy({ left: -400, behavior: 'smooth' })}
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-opacity hover:bg-black/90"
+                onClick={() => recentScrollRef.current?.scrollBy({ left: 400, behavior: 'smooth' })}
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
           </AnimeRow>
         )}
