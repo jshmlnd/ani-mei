@@ -131,7 +131,7 @@ query ($page: Int, $perPage: Int, $sort: [MediaSort], $type: MediaType, $status:
       ${MEDIA_FIELDS}
     }
   }
-`;
+}`;
 
 const DETAILS_QUERY = `
 query ($id: Int) {
