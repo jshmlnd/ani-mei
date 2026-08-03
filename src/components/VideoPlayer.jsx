@@ -252,9 +252,17 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFullscreenChange = () => setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement));
     document.addEventListener('fullscreenchange', onFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    document.addEventListener('mozfullscreenchange', onFullscreenChange);
+    document.addEventListener('MSFullscreenChange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', onFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', onFullscreenChange);
+    };
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -290,7 +298,13 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    if (document.fullscreenElement) document.exitFullscreen(); else container.requestFullscreen();
+    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+      if (exit) exit.call(document);
+    } else {
+      const req = container.requestFullscreen || container.webkitRequestFullscreen || container.mozRequestFullScreen || container.msRequestFullscreen;
+      if (req) req.call(container);
+    }
   }, []);
 
   const changeQuality = useCallback((levelIndex) => {
@@ -328,6 +342,18 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       if (isPlaying) setShowControls(false);
     }, 3000);
   }, [isPlaying]);
+
+  const handleTouchStart = useCallback(() => {
+    if (showControls) {
+      setShowControls(false);
+    } else {
+      setShowControls(true);
+      if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+      hideControlsTimer.current = setTimeout(() => {
+        if (isPlaying) setShowControls(false);
+      }, 4000);
+    }
+  }, [isPlaying, showControls]);
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -383,6 +409,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       className="relative bg-black rounded-lg overflow-hidden group select-none"
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
+      onTouchStart={handleTouchStart}
     >
       <video
         ref={videoRef}
@@ -390,6 +417,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         poster={poster}
         onClick={togglePlay}
         playsInline
+        style={{ touchAction: 'manipulation' }}
       />
 
       {isLoading && (
@@ -428,6 +456,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
+        onTouchStart={(e) => e.stopPropagation()}
       >
         <div className="px-4 pb-3">
           <div className="relative h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 group/progress hover:h-2.5 transition-all" onClick={seek}>
@@ -490,7 +519,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
               </div>
             )}
 
-            <button className="btn btn-ghost btn-xs text-white hover:text-primary" onClick={toggleFullscreen}>
+            <button className="btn btn-ghost btn-xs text-white hover:text-primary p-2 min-h-0 h-auto" onClick={toggleFullscreen}>
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
           </div>
