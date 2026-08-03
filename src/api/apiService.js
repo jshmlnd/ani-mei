@@ -57,11 +57,16 @@ async function searchStream(keyword) {
 
 async function getStream(slug, episode) {
   const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
-  const { data: streamData } = await axios.get(rawProxyUrl(api), {
-    timeout: 20000,
-    responseType: 'json',
-  });
-  if (!streamData?.success || !streamData?.data) throw new Error('Failed to get stream');
+  let streamData;
+  try {
+    ({ data: streamData } = await axios.get(rawProxyUrl(api), {
+      timeout: 20000,
+      responseType: 'json',
+    }));
+  } catch {
+    return { m3u8: '', embedUrl: '', m3u8Headers: {} };
+  }
+  if (!streamData?.success || !streamData?.data) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
 
   const embedUrl = streamData.data.streaming_link || '';
 
