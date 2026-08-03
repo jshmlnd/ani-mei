@@ -58,11 +58,13 @@ async function searchStream(keyword) {
 
 async function getStream(slug, episode) {
   const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
+  console.log('[stream] fetching', rawProxyUrl(api));
   const { data: streamData } = await axios.get(rawProxyUrl(api), {
     timeout: 20000,
     responseType: 'json',
     transformResponse: [(d) => d],
   });
+  console.log('[stream] API response:', JSON.stringify(streamData).slice(0, 200));
   if (!streamData?.success || !streamData?.data) throw new Error('Failed to get stream');
 
   const embedUrl = streamData.data.streaming_link || '';
@@ -70,6 +72,7 @@ async function getStream(slug, episode) {
   if (embedUrl) {
     try {
       const m3u8Url = await extractM3u8FromEmbed(embedUrl);
+      console.log('[stream] m3u8 result:', m3u8Url);
       if (m3u8Url) {
         return {
           m3u8: proxyUrl(m3u8Url),
@@ -77,7 +80,9 @@ async function getStream(slug, episode) {
           m3u8Headers: {},
         };
       }
-    } catch {}
+    } catch (e) {
+      console.error('[stream] extractM3u8FromEmbed failed:', e);
+    }
   }
 
   return { m3u8: '', embedUrl, m3u8Headers: {} };
@@ -271,6 +276,7 @@ export async function getStreamUrl(animeTitle, episode) {
   try {
     return await getStream(slugify(animeTitle), episode);
   } catch (err) {
+    console.error('[stream] slug getStream failed:', slugify(animeTitle), err);
     lastError = err;
   }
 
@@ -282,6 +288,7 @@ export async function getStreamUrl(animeTitle, episode) {
     if (!best.id) throw new Error('No valid anime ID');
     return await getStream(best.id, episode);
   } catch (err) {
+    console.error('[stream] search fallback failed:', animeTitle, err);
     lastError = err;
   }
 
