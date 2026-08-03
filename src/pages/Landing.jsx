@@ -94,9 +94,9 @@ export default function Landing() {
           <nav className="flex items-center gap-1 mb-8">
             {[
               { to: '/browse', label: 'Home', primary: true },
-              { to: '/browse?type=TRENDING', label: 'Trending' },
-              { to: '/browse?type=NEW', label: 'New Releases' },
-              { to: '/browse?type=TOP', label: 'Top Rated' },
+              { to: '/search?type=TRENDING', label: 'Trending' },
+              { to: '/search?type=NEW', label: 'New Releases' },
+              { to: '/search?type=TOP', label: 'Top Rated' },
 
             ].map((link) => (
               <Link

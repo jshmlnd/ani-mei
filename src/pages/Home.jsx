@@ -108,7 +108,7 @@ export default function Home() {
           <AnimeRow
             title="Popular Anime"
             subtitle="Most watched right now"
-            linkTo="/browse?type=TRENDING"
+            linkTo="/search?type=TRENDING"
             linkText="View All"
           >
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
@@ -123,7 +123,7 @@ export default function Home() {
           <AnimeRow
             title="New Episodes"
             subtitle="Recently updated episodes"
-            linkTo="/browse?type=NEW"
+            linkTo="/search?type=NEW"
             linkText="View All"
           >
             <div className="relative -mx-4 px-4">
@@ -143,7 +143,7 @@ export default function Home() {
           <AnimeRow
             title="Top Rated"
             subtitle="Highest rated anime of all time"
-            linkTo="/browse?type=TOP"
+            linkTo="/search?type=TOP"
             linkText="View All"
           >
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
@@ -170,10 +170,10 @@ export default function Home() {
                     New episodes added daily.
                   </p>
                   <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <Link to="/browse?type=TRENDING" className="px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]">
+                    <Link to="/search?type=TRENDING" className="px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]">
                       Browse Trending
                     </Link>
-                    <Link to="/browse?type=NEW" className="px-6 py-3 text-white/70 hover:text-white font-medium text-sm rounded-full border border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.04] transition-all duration-300">
+                    <Link to="/search?type=NEW" className="px-6 py-3 text-white/70 hover:text-white font-medium text-sm rounded-full border border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.04] transition-all duration-300">
                       New Releases
                     </Link>
                   </div>
