@@ -87,12 +87,6 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Link
-              to="/hentai"
-              className="px-3 py-2 text-sm font-medium text-red-400 hover:text-red-300 rounded-lg hover:bg-red-500/10 transition-all duration-200"
-            >
-              +18
-            </Link>
           </div>
 
           <div ref={searchRef} className="relative">
@@ -164,13 +158,6 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Link
-              to="/hentai"
-              className="block px-3 py-2.5 text-sm font-medium text-red-400 hover:text-red-300 rounded-lg hover:bg-red-500/10 transition-all"
-              onClick={() => setMobileOpen(false)}
-            >
-              +18
-            </Link>
           </div>
         </div>
       )}

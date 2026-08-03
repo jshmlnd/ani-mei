@@ -5,7 +5,7 @@ import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Watch from './pages/Watch';
 import Search from './pages/Search';
-import Hentai from './pages/Hentai';
+
 import './App.css';
 
 function AppContent() {
@@ -22,7 +22,7 @@ function AppContent() {
           <Route path="/browse/:type" element={<Home />} />
           <Route path="/anime/:id" element={<Watch />} />
           <Route path="/search" element={<Search />} />
-          <Route path="/hentai" element={<Hentai />} />
+
         </Routes>
       </main>
       {!isLanding && <Footer />}

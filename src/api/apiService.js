@@ -131,17 +131,7 @@ query ($page: Int, $perPage: Int, $sort: [MediaSort], $type: MediaType, $status:
       ${MEDIA_FIELDS}
     }
   }
-}`;
-
-const HENTAI_QUERY = `
-query ($page: Int, $perPage: Int, $sort: [MediaSort], $type: MediaType, $isAdult: Boolean) {
-  Page(page: $page, perPage: $perPage) {
-    pageInfo { total lastPage hasNextPage currentPage }
-    media(sort: $sort, type: $type, isAdult: $isAdult) {
-      ${MEDIA_FIELDS}
-    }
-  }
-}`;
+`;
 
 const DETAILS_QUERY = `
 query ($id: Int) {
@@ -236,17 +226,6 @@ export async function searchAnime(keyword, page = 1, perPage = 20) {
     sort: ['SEARCH_MATCH'],
     type: 'ANIME',
     genre_not_in: HENTAI_EXCLUDE,
-  });
-  return { media: data.Page.media, pageInfo: data.Page.pageInfo };
-}
-
-export async function getHentaiAnime(page = 1, perPage = 20) {
-  const data = await post(HENTAI_QUERY, {
-    page,
-    perPage,
-    sort: ['POPULARITY_DESC'],
-    type: 'ANIME',
-    isAdult: true,
   });
   return { media: data.Page.media, pageInfo: data.Page.pageInfo };
 }

@@ -97,7 +97,7 @@ export default function Landing() {
               { to: '/browse?type=TRENDING', label: 'Trending' },
               { to: '/browse?type=NEW', label: 'New Releases' },
               { to: '/browse?type=TOP', label: 'Top Rated' },
-              { to: '/hentai', label: '+18', danger: true },
+
             ].map((link) => (
               <Link
                 key={link.to}
