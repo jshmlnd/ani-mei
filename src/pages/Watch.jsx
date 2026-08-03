@@ -110,7 +110,7 @@ export default function Watch() {
                   <p className="text-sm text-red-400/80 font-medium">{streamError}</p>
                 </div>
               </div>
-            ) : !streamUrl ? (
+            ) : !streamUrl && !streamFallback ? (
               <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-xl flex items-center justify-center glow-shadow">
                 <div className="text-center px-4">
                   <CircleOff className="w-14 h-14 mx-auto text-red-400/50 mb-3" />

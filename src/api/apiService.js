@@ -42,10 +42,12 @@ function slugify(title) {
 }
 
 async function searchStream(keyword) {
-  const { data } = await axios.get(
-    `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`,
-    { timeout: 15000 }
-  );
+  const api = `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`;
+  const { data } = await axios.get(rawProxyUrl(api), {
+    timeout: 15000,
+    responseType: 'json',
+    transformResponse: [(d) => d],
+  });
   if (!data?.success || !data?.data?.length) return [];
   return data.data.map((r) => ({
     id: r.slug || '',
@@ -55,10 +57,12 @@ async function searchStream(keyword) {
 }
 
 async function getStream(slug, episode) {
-  const { data: streamData } = await axios.get(
-    `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`,
-    { timeout: 20000 }
-  );
+  const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
+  const { data: streamData } = await axios.get(rawProxyUrl(api), {
+    timeout: 20000,
+    responseType: 'json',
+    transformResponse: [(d) => d],
+  });
   if (!streamData?.success || !streamData?.data) throw new Error('Failed to get stream');
 
   const embedUrl = streamData.data.streaming_link || '';

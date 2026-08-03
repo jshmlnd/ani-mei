@@ -64,7 +64,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const initHls = useCallback(() => {
     if (shouldUseIframe) return;
     const video = videoRef.current;
-    if (!video || !src) return;
+    if (!video || !src) {
+      if (!src && fallbackSrc && !fallbackSrc.includes('.m3u8')) {
+        switchToIframe();
+      }
+      return;
+    }
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
