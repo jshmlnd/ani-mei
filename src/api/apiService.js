@@ -34,6 +34,13 @@ async function extractM3u8FromEmbed(embedUrl) {
   return null;
 }
 
+function slugify(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 async function searchStream(keyword) {
   const { data } = await axios.get(
     `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`,
@@ -255,13 +262,24 @@ export function getEpisodeCount(media) {
 }
 
 export async function getStreamUrl(animeTitle, episode) {
-  const results = await searchStream(animeTitle);
-  if (!results.length) throw new Error('Anime not found on streaming source');
+  let lastError;
 
-  const lower = animeTitle.toLowerCase();
-  const best = results.find((r) => r.title.toLowerCase().includes(lower)) || results[0];
+  try {
+    return await getStream(slugify(animeTitle), episode);
+  } catch (err) {
+    lastError = err;
+  }
 
-  if (!best.id) throw new Error('No valid anime ID');
+  try {
+    const results = await searchStream(animeTitle);
+    if (!results.length) throw new Error('Anime not found on streaming source');
+    const lower = animeTitle.toLowerCase();
+    const best = results.find((r) => r.title.toLowerCase().includes(lower)) || results[0];
+    if (!best.id) throw new Error('No valid anime ID');
+    return await getStream(best.id, episode);
+  } catch (err) {
+    lastError = err;
+  }
 
-  return await getStream(best.id, episode);
+  throw lastError || new Error('No stream API available');
 }
