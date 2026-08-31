@@ -126,7 +126,8 @@ async function getStream(slug, episode) {
       }
     }
   } catch (e) {
-    console.warn('[getStream] /player failed for', slug, episode, e?.message);
+    const status = e?.response?.status;
+    if (status !== 404) console.warn('[getStream] /player failed for', slug, episode, e?.message);
   }
 
   // Fallback: try /servers/:slug/:episode -> /stream/:linkId
@@ -346,19 +347,46 @@ export function getEpisodeCount(media) {
 export async function getStreamUrl(animeTitle, episode) {
   let lastError;
 
+  // Search first – slugify('Attack on Titan') -> 'attack-on-titan' always 404 (needs suffix like -bgaoa)
+  // so we rank exact matches first to avoid OVA/season mismatches
   try {
-    return await getStream(slugify(animeTitle), episode);
+    const results = await searchStream(animeTitle);
+    if (results.length) {
+      const lower = animeTitle.toLowerCase().trim();
+      const score = (t) => {
+        const tl = t.toLowerCase().trim();
+        if (tl === lower) return 0;
+        if (tl.startsWith(lower)) return 1;
+        if (tl.includes(lower)) return 2;
+        return 3;
+      };
+      const ranked = [...results].sort((a, b) => score(a.title) - score(b.title));
+
+      let candidateError;
+      for (const cand of ranked.slice(0, 5)) {
+        if (!cand.id) continue;
+        try {
+          const r = await getStream(cand.id, episode);
+          if (r?.m3u8 || r?.embedUrl) return r;
+          candidateError = new Error(`No stream for ${cand.title} (${cand.id})`);
+          lastError = candidateError;
+        } catch (e) {
+          candidateError = e;
+          lastError = e;
+        }
+      }
+      if (candidateError) throw candidateError;
+      if (!lastError) throw new Error('No stream found among search results');
+    }
   } catch (err) {
     lastError = err;
   }
 
+  // Fallback to direct slugified title (for already-correct slugs like "one-piece-155")
   try {
-    const results = await searchStream(animeTitle);
-    if (!results.length) throw new Error('Anime not found on streaming source');
-    const lower = animeTitle.toLowerCase();
-    const best = results.find((r) => r.title.toLowerCase().includes(lower)) || results[0];
-    if (!best.id) throw new Error('No valid anime ID');
-    return await getStream(best.id, episode);
+    const direct = await getStream(slugify(animeTitle), episode);
+    if (direct?.m3u8 || direct?.embedUrl) return direct;
+    if (!lastError) lastError = new Error(`No stream for slugified title ${slugify(animeTitle)}`);
   } catch (err) {
     lastError = err;
   }
