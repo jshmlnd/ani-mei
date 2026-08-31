@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const ANILIST_API = import.meta.env.VITE_ANILIST_API || 'https://graphql.anilist.co';
-const STREAM_API = 'https://animeiapi.joshuaklein-malonda.workers.dev';
+const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://animeiapi.joshuaklein-malonda.workers.dev';
 
 const PROXY_BASE = '/api/proxy';
 
@@ -42,47 +42,141 @@ function slugify(title) {
 }
 
 async function searchStream(keyword) {
-  const api = `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`;
-  const { data } = await axios.get(rawProxyUrl(api), {
-    timeout: 15000,
-    responseType: 'json',
-  });
-  if (!data?.success || !data?.data?.length) return [];
-  return data.data.map((r) => ({
-    id: r.slug || '',
-    title: r.title?.replace(/&#\d+;/g, (m) => String.fromCharCode(parseInt(m.slice(2, -1)))) || '',
-    type: r.type || 'sub',
-  }));
+  // New API: GET /search?q=keyword (AniMeiAPI – AnikotoTV)
+  try {
+    const api = `${STREAM_API}/search?q=${encodeURIComponent(keyword)}`;
+    const { data } = await axios.get(rawProxyUrl(api), {
+      timeout: 15000,
+      responseType: 'json',
+    });
+    if (data?.success) {
+      const raw = data?.data?.data ?? data?.data ?? [];
+      const list = Array.isArray(raw) ? raw : raw?.data ?? [];
+      if (Array.isArray(list) && list.length) {
+        return list.map((r) => ({
+          id: r.slug || '',
+          title: r.title?.replace(/&#\d+;/g, (m) => String.fromCharCode(parseInt(m.slice(2, -1)))) || '',
+          type: r.type || 'sub',
+        }));
+      }
+    }
+  } catch (e) {
+    console.warn('[searchStream] /search failed:', e?.message);
+  }
+  // Fallback to legacy endpoint for backwards-compat
+  try {
+    const api = `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`;
+    const { data } = await axios.get(rawProxyUrl(api), {
+      timeout: 15000,
+      responseType: 'json',
+    });
+    if (!data?.success || !data?.data?.length) return [];
+    return data.data.map((r) => ({
+      id: r.slug || '',
+      title: r.title?.replace(/&#\d+;/g, (m) => String.fromCharCode(parseInt(m.slice(2, -1)))) || '',
+      type: r.type || 'sub',
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function getStream(slug, episode) {
-  const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
-  let streamData;
+  // New API flow: GET /player/:slug/:episode -> { player: { url }, stream: { url } }
+  // then extract m3u8 from embedUrl via proxy
+  let embedUrl = '';
   try {
-    ({ data: streamData } = await axios.get(rawProxyUrl(api), {
+    const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
+    const { data: playerData } = await axios.get(rawProxyUrl(api), {
       timeout: 20000,
       responseType: 'json',
-    }));
-  } catch {
-    return { m3u8: '', embedUrl: '', m3u8Headers: {} };
-  }
-  if (!streamData?.success || !streamData?.data) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
-
-  const embedUrl = streamData.data.streaming_link || '';
-
-  if (embedUrl) {
-    try {
-      const m3u8Url = await extractM3u8FromEmbed(embedUrl);
-      if (m3u8Url) {
-        return {
-          m3u8: proxyUrl(m3u8Url),
-          embedUrl,
-          m3u8Headers: {},
-        };
+    });
+    if (playerData?.success && playerData?.data) {
+      embedUrl =
+        playerData.data.player?.url ||
+        playerData.data.stream?.url ||
+        playerData.data.url ||
+        playerData.data.player?.iframe?.match(/src="([^"]+)"/)?.[1] ||
+        '';
+      // If we got linkId but no url, try /stream/:linkId
+      if (!embedUrl && playerData.data.linkId) {
+        try {
+          const streamApi = `${STREAM_API}/stream/${encodeURIComponent(playerData.data.linkId)}`;
+          const { data: streamData } = await axios.get(rawProxyUrl(streamApi), {
+            timeout: 15000,
+            responseType: 'json',
+          });
+          embedUrl = streamData?.data?.url || streamData?.data?.raw?.url || '';
+        } catch {}
       }
-    } catch (e) {
-      console.error('[stream] extractM3u8FromEmbed failed:', e);
+      // Also try servers -> stream fallback if player url missing
+      if (!embedUrl) {
+        const flat = playerData.data.flatServers || playerData.data.servers?.sub || [];
+        const first = Array.isArray(flat) ? flat[0] : null;
+        if (first?.linkId) {
+          try {
+            const streamApi = `${STREAM_API}/stream/${encodeURIComponent(first.linkId)}`;
+            const { data: sData } = await axios.get(rawProxyUrl(streamApi), {
+              timeout: 15000,
+              responseType: 'json',
+            });
+            embedUrl = sData?.data?.url || sData?.data?.raw?.url || '';
+          } catch {}
+        }
+      }
     }
+  } catch (e) {
+    console.warn('[getStream] /player failed for', slug, episode, e?.message);
+  }
+
+  // Fallback: try /servers/:slug/:episode -> /stream/:linkId
+  if (!embedUrl) {
+    try {
+      const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
+      const { data: serversData } = await axios.get(rawProxyUrl(api), {
+        timeout: 15000,
+        responseType: 'json',
+      });
+      const flat = serversData?.data?.flat || serversData?.data?.servers?.sub || [];
+      const first = Array.isArray(flat) ? flat[0] : null;
+      if (first?.linkId) {
+        const streamApi = `${STREAM_API}/stream/${encodeURIComponent(first.linkId)}`;
+        const { data: sData } = await axios.get(rawProxyUrl(streamApi), {
+          timeout: 15000,
+          responseType: 'json',
+        });
+        embedUrl = sData?.data?.url || sData?.data?.raw?.url || '';
+      }
+    } catch {}
+  }
+
+  // Legacy fallback: /api/v1/episode-stream
+  if (!embedUrl) {
+    try {
+      const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
+      const { data: streamData } = await axios.get(rawProxyUrl(api), {
+        timeout: 20000,
+        responseType: 'json',
+      });
+      if (streamData?.success && streamData?.data?.streaming_link) {
+        embedUrl = streamData.data.streaming_link;
+      }
+    } catch {}
+  }
+
+  if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
+
+  try {
+    const m3u8Url = await extractM3u8FromEmbed(embedUrl);
+    if (m3u8Url) {
+      return {
+        m3u8: proxyUrl(m3u8Url),
+        embedUrl,
+        m3u8Headers: {},
+      };
+    }
+  } catch (e) {
+    console.error('[stream] extractM3u8FromEmbed failed:', e);
   }
 
   return { m3u8: '', embedUrl, m3u8Headers: {} };
