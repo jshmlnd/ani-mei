@@ -94,9 +94,9 @@ export default function Landing() {
           <nav className="flex items-center gap-1 mb-8">
             {[
               { to: '/browse', label: 'Home', primary: true },
-              { to: '/search?type=TRENDING', label: 'Trending' },
-              { to: '/search?type=NEW', label: 'New Releases' },
-              { to: '/search?type=TOP', label: 'Top Rated' },
+              { to: '/search?type=TRENDING', label: 'New Releases' },
+              { to: '/search?type=NEW', label: 'Latest' },
+              { to: '/search?type=TOP', label: 'Completed' },
 
             ].map((link) => (
               <Link
@@ -146,10 +146,10 @@ export default function Landing() {
                     className="flex items-center gap-3 w-full p-3 hover:bg-white/[0.06] transition-colors text-left border-b border-white/[0.04] last:border-0"
                     onClick={() => { setShowSuggestions(false); setSearchQuery(''); navigate(`/anime/${anime.id}`); }}
                   >
-                    <img src={anime.coverImage?.medium} alt="" className="w-10 h-14 object-cover rounded-lg" loading="lazy" />
+                    <img src={anime.coverImage?.medium || anime.coverImage?.large || anime.poster} alt="" className="w-10 h-14 object-cover rounded-lg" loading="lazy" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">{getDisplayTitle(anime)}</p>
-                      <p className="text-xs text-[var(--text-muted)]">{anime.format?.replace('_', ' ')} {anime.episodes && `\u00B7 ${anime.episodes} eps`}</p>
+                      <p className="text-xs text-[var(--text-muted)]">{String(anime.format || anime.type || '').replace('_', ' ')} {anime.episodes && `\u00B7 ${anime.episodes} eps`}</p>
                     </div>
                   </button>
                 ))}
@@ -200,7 +200,7 @@ export default function Landing() {
                 >
                   <div className="w-24 md:w-28 aspect-[3/4] rounded-xl overflow-hidden bg-white/[0.03] border border-white/[0.06] group-hover/card:border-[var(--accent)]/30 transition-all duration-300 group-hover/card:shadow-[0_0_20px_rgba(168,85,247,0.15)]">
                     <img
-                      src={anime.coverImage?.medium}
+                      src={anime.coverImage?.medium || anime.coverImage?.large || anime.poster}
                       alt={getDisplayTitle(anime)}
                       className="w-full h-full object-cover"
                       loading="lazy"

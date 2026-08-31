@@ -25,7 +25,9 @@ export default function AnimeCard({ anime, className = '' }) {
   }, []);
 
   const title = getDisplayTitle(anime);
-  const coverImage = anime.coverImage?.large || anime.coverImage?.medium;
+  const coverImage = anime.coverImage?.large || anime.coverImage?.medium || anime.poster || anime._raw?.poster;
+  const displayEpisodes = anime.episodes ?? anime.episodeCount ?? anime._raw?.episodes?.total ?? anime._raw?.episodes?.sub;
+  const displayFormat = anime.format || anime.type || anime._raw?.type;
 
   return (
     <Link
@@ -73,10 +75,10 @@ export default function AnimeCard({ anime, className = '' }) {
           </div>
         )}
 
-        {anime.format && (
+        {displayFormat && (
           <div className="absolute top-2 left-2 z-10">
             <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-[var(--accent)]/20 text-[var(--accent)] backdrop-blur-sm rounded-md border border-[var(--accent)]/20">
-              {anime.format.replace('_', ' ')}
+              {String(displayFormat).replace('_', ' ')}
             </span>
           </div>
         )}
@@ -101,11 +103,17 @@ export default function AnimeCard({ anime, className = '' }) {
           {title}
         </h3>
         <div className="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--text-muted)]">
-          {anime.episodes && <span>{anime.episodes} eps</span>}
+          {displayEpisodes && <span>{displayEpisodes} eps</span>}
           {anime.season && anime.seasonYear && (
             <>
               <span className="w-0.5 h-0.5 bg-[var(--text-muted)] rounded-full" />
               <span>{anime.season.charAt(0) + anime.season.slice(1).toLowerCase()} {anime.seasonYear}</span>
+            </>
+          )}
+          {!anime.season && anime.type && displayEpisodes && (
+            <>
+              <span className="w-0.5 h-0.5 bg-[var(--text-muted)] rounded-full" />
+              <span>{anime.type}</span>
             </>
           )}
         </div>

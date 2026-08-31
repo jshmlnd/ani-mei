@@ -58,9 +58,9 @@ export default function Navbar() {
 
   const navLinks = [
     { to: '/browse', label: 'Home' },
-    { to: '/browse?type=TRENDING', label: 'Trending' },
-    { to: '/browse?type=NEW', label: 'New Releases' },
-    { to: '/browse?type=TOP', label: 'Top Rated' },
+    { to: '/browse?type=TRENDING', label: 'New Releases' },
+    { to: '/browse?type=NEW', label: 'Latest' },
+    { to: '/browse?type=TOP', label: 'Completed' },
   ];
 
   return (
@@ -112,11 +112,11 @@ export default function Navbar() {
                     className="flex items-center gap-3 w-full p-3 hover:bg-white/[0.06] transition-colors text-left border-b border-white/[0.04] last:border-0"
                     onClick={() => { setShowSuggestions(false); setSearchQuery(''); navigate(`/anime/${anime.id}`); }}
                   >
-                    <img src={anime.coverImage?.medium} alt="" className="w-10 h-14 object-cover rounded-lg" loading="lazy" />
+                    <img src={anime.coverImage?.medium || anime.coverImage?.large || anime.poster} alt="" className="w-10 h-14 object-cover rounded-lg" loading="lazy" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">{getDisplayTitle(anime)}</p>
                       <p className="text-xs text-[var(--text-muted)]">
-                        {anime.format?.replace('_', ' ')} {anime.episodes && `\u00B7 ${anime.episodes} eps`}
+                        {String(anime.format || anime.type || '').replace('_', ' ')} {anime.episodes && `\u00B7 ${anime.episodes} eps`}
                       </p>
                     </div>
                   </button>

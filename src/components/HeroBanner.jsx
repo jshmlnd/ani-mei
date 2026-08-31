@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getTopAiring } from '../api/apiService';
+import { getPopularAnime } from '../api/apiService';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -11,8 +11,9 @@ const HeroBanner = () => {
   useEffect(() => {
     const fetchPopular = async () => {
       try {
-        const data = await getTopAiring(1);
-        setAnimeList(Array.isArray(data) ? data.slice(0, 10) : []);
+        const data = await getPopularAnime(1, 10);
+        const list = data?.media || (Array.isArray(data) ? data : []);
+        setAnimeList(Array.isArray(list) ? list.slice(0, 10) : []);
       } catch (err) {
         console.error('Failed to load hero banner:', err);
       } finally {
@@ -45,19 +46,22 @@ const HeroBanner = () => {
   if (animeList.length === 0) return null;
 
   const current = animeList[currentIndex];
+  const getTitle = (a) => a?.title?.english || a?.title?.romaji || a?.animeTitle || a?.title || 'Unknown';
+  const getId = (a) => a?.id || a?.slug || a?.animeId;
+  const getImg = (a) => a?.coverImage?.large || a?.coverImage?.medium || a?.bannerImage || a?.poster || a?.animeImg;
 
   return (
     <div className="relative w-full h-[60vh] min-h-[400px] overflow-hidden">
       {animeList.map((anime, i) => (
         <div
-          key={anime.animeId}
+          key={getId(anime) || i}
           className={`absolute inset-0 transition-opacity duration-1000 ${
             i === currentIndex ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
           <img
-            src={anime.animeImg}
-            alt={anime.animeTitle}
+            src={getImg(anime)}
+            alt={getTitle(anime)}
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/60 to-transparent" />
@@ -77,20 +81,20 @@ const HeroBanner = () => {
               ))}
             </div>
             <h2 className="text-3xl md:text-5xl font-bold text-base-content mb-4 line-clamp-2">
-              {current.animeTitle}
+              {getTitle(current)}
             </h2>
-            {current.latestEp && (
-              <p className="text-base-content/70 mb-6">{current.latestEp}</p>
+            {(current.latestEp || current.episodes) && (
+              <p className="text-base-content/70 mb-6">{current.latestEp || `${current.episodes || '?'} episodes`}</p>
             )}
             <div className="flex gap-3">
               <Link
-                to={`/anime/${current.animeId}`}
+                to={`/anime/${getId(current)}`}
                 className="btn btn-primary"
               >
                 Watch Now
               </Link>
               <Link
-                to={`/anime/${current.animeId}`}
+                to={`/anime/${getId(current)}`}
                 className="btn btn-outline"
               >
                 Details

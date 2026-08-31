@@ -6,6 +6,7 @@ import {
   getEpisodeCount,
   getStreamUrl,
   getAnimeServers,
+  getServers,
   getStreamByLinkId,
 } from '../api/apiService';
 import { stripHtml, formatDate } from '../utils/helpers';
@@ -53,6 +54,8 @@ export default function Watch() {
   }, [id]);
 
   // Fetch servers for current episode via server-selector API
+  // Prefers direct slug if available (stream lists guarantee a valid slug),
+  // falling back to title-search for legacy AniList entries.
   useEffect(() => {
     if (!anime) return;
     let cancelled = false;
@@ -68,14 +71,31 @@ export default function Watch() {
       setStreamHeaders({});
       setStreamError(null);
       try {
-        const title = anime.title?.english || anime.title?.romaji || '';
+        const directSlug = anime.slug || (typeof anime.id === 'string' && anime.id.includes('-') ? anime.id : null) || (typeof id === 'string' && id.includes('-') ? id : null);
+        // 1) Try direct slug path (fast, exact match to stream API)
+        if (directSlug && directSlug.includes('-')) {
+          try {
+            const direct = await getServers(directSlug, episode);
+            if (cancelled) return;
+            if (direct.flat?.length || Object.keys(direct.servers || {}).length) {
+              setServers(direct.servers || {});
+              setFlatServers(direct.flat || []);
+              setResolvedSlug(direct.slug || directSlug);
+              const preferred = direct.servers?.sub?.[0] || direct.servers?.dub?.[0] || (direct.flat || [])[0] || null;
+              if (preferred) setSelectedServer(preferred);
+              return;
+            }
+          } catch (_e) { void _e; }
+        }
+        // 2) Fallback: title-based search ranking (for AniList numeric IDs or missing slug)
+        const title = anime.title?.english || anime.title?.romaji || getDisplayTitle(anime) || '';
         const data = await getAnimeServers(title, episode);
         if (cancelled) return;
         const srv = data.servers || {};
         const flat = data.flat || [];
         setServers(srv);
         setFlatServers(flat);
-        setResolvedSlug(data.slug || '');
+        setResolvedSlug(data.slug || directSlug || '');
         // auto-pick best server: prefer SUB first, then first flat entry
         const preferred = srv.sub?.[0] || srv.dub?.[0] || flat[0] || null;
         if (preferred) {
@@ -83,7 +103,6 @@ export default function Watch() {
         } else if (!flat.length && !Object.keys(srv).length) {
           // No servers found — will fallback to legacy stream attempt in stream effect
           setServersError(null);
-          // Trigger fallback path by not selecting; stream effect will handle fallback
         }
       } catch (e) {
         if (!cancelled) setServersError(e?.message || 'Failed to load servers');
@@ -93,7 +112,7 @@ export default function Watch() {
     };
     fetchServers();
     return () => { cancelled = true; };
-  }, [anime, episode]);
+  }, [anime, episode, id]);
 
   // Fetch stream for the selected server; fallback to legacy getStreamUrl if no servers
   useEffect(() => {
@@ -179,9 +198,9 @@ export default function Watch() {
 
   const title = getDisplayTitle(anime);
   const totalEpisodes = getEpisodeCount(anime);
-  const description = stripHtml(anime.description);
+  const description = stripHtml(anime.description || anime.synopsis || '');
   const relations = anime.relations?.edges?.filter(
-    (e) => e.relationType === 'SEQUEL' || e.relationType === 'PREQUEL'
+    (e) => e.relationType === 'SEQUEL' || e.relationType === 'PREQUEL' || e.relationType === 'RELATED'
   ) || [];
 
   return (
@@ -217,7 +236,7 @@ export default function Watch() {
                   src={streamUrl}
                   fallbackSrc={streamFallback}
                   headers={streamHeaders}
-                  poster={anime.bannerImage || anime.coverImage?.large}
+                  poster={anime.bannerImage || anime.coverImage?.large || anime.poster}
                   title={`${title} - Episode ${episode}`}
                 />
               </div>
@@ -255,11 +274,14 @@ export default function Watch() {
               )}
 
               <div className="flex flex-wrap gap-1.5 mt-3">
-                {anime.genres?.map((genre) => (
-                  <span key={genre} className="px-2.5 py-1 text-xs font-medium bg-white/[0.05] text-[var(--text-secondary)] rounded-full border border-white/[0.06]">
-                    {genre}
-                  </span>
-                ))}
+                {anime.genres?.map((genre) => {
+                  const g = typeof genre === 'string' ? genre : genre?.name;
+                  return (
+                    <span key={g} className="px-2.5 py-1 text-xs font-medium bg-white/[0.05] text-[var(--text-secondary)] rounded-full border border-white/[0.06]">
+                      {g}
+                    </span>
+                  );
+                })}
               </div>
 
               {relations.length > 0 && (
@@ -309,10 +331,10 @@ export default function Watch() {
             <div className="glass-panel rounded-xl p-5 sticky top-20">
               <h3 className="font-bold text-white mb-4">Anime Details</h3>
               <div className="space-y-4">
-                {anime.coverImage?.large && (
+                {(anime.coverImage?.large || anime.poster) && (
                   <div className="relative rounded-lg overflow-hidden">
                     <img
-                      src={anime.coverImage.large}
+                      src={anime.coverImage?.large || anime.poster}
                       alt={title}
                       className="w-full aspect-[3/4] object-cover"
                     />
@@ -320,10 +342,10 @@ export default function Watch() {
                   </div>
                 )}
                 <div className="space-y-2.5 text-sm">
-                  {anime.format && (
+                  {(anime.format || anime.type) && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Format</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{anime.format.replace('_', ' ')}</span>
+                      <span className="text-[var(--text-secondary)] font-medium">{String(anime.format || anime.type).replace('_', ' ')}</span>
                     </div>
                   )}
                   {anime.status && (

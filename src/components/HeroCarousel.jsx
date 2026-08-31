@@ -37,7 +37,7 @@ export default function HeroCarousel({ animeList }) {
         >
           <div className="absolute inset-0">
             <img
-              src={anime.bannerImage || anime.coverImage?.large}
+              src={anime.bannerImage || anime.coverImage?.large || anime.poster || anime._raw?.poster}
               alt={getDisplayTitle(anime)}
               className={`w-full h-full object-cover ${
                 index === currentIndex ? 'animate-ken-burns' : ''
@@ -54,9 +54,9 @@ export default function HeroCarousel({ animeList }) {
         <div className="max-w-7xl mx-auto px-6 w-full">
           <div className="max-w-xl" key={currentIndex}>
             <div className="flex items-center gap-2 mb-4 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-              {currentAnime.format && (
+              {(currentAnime.format || currentAnime.type) && (
                 <span className="px-2.5 py-1 text-xs font-bold bg-[var(--accent)]/20 text-[var(--accent)] rounded-full border border-[var(--accent)]/30">
-                  {currentAnime.format.replace('_', ' ')}
+                  {String(currentAnime.format || currentAnime.type).replace('_', ' ')}
                 </span>
               )}
               {currentAnime.averageScore && (
@@ -85,10 +85,10 @@ export default function HeroCarousel({ animeList }) {
               {currentAnime.season && currentAnime.seasonYear && (
                 <span>{currentAnime.season.charAt(0) + currentAnime.season.slice(1).toLowerCase()} {currentAnime.seasonYear}</span>
               )}
-              {currentAnime.episodes && (
+              {(currentAnime.episodes || currentAnime.episodeCount || currentAnime._raw?.episodes?.total) && (
                 <>
                   <span className="w-1 h-1 bg-white/30 rounded-full" />
-                  <span>{currentAnime.episodes} Episodes</span>
+                  <span>{currentAnime.episodes || currentAnime.episodeCount || currentAnime._raw?.episodes?.total} Episodes</span>
                 </>
               )}
               {currentAnime.studios?.nodes?.[0] && (
@@ -97,21 +97,30 @@ export default function HeroCarousel({ animeList }) {
                   <span>{currentAnime.studios.nodes[0].name}</span>
                 </>
               )}
+              {!currentAnime.season && currentAnime.type && !currentAnime.studios?.nodes?.[0] && currentAnime.score && (
+                <>
+                  <span className="w-1 h-1 bg-white/30 rounded-full" />
+                  <span>Score {currentAnime.score}</span>
+                </>
+              )}
             </div>
 
-            {currentAnime.description && (
+            {(currentAnime.description || currentAnime.synopsis) && (
               <p className="text-sm text-white/50 mb-5 line-clamp-3 leading-relaxed animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-                {currentAnime.description.replace(/<[^>]*>/g, '')}
+                {(currentAnime.description || currentAnime.synopsis || '').replace(/<[^>]*>/g, '')}
               </p>
             )}
 
-            {currentAnime.genres && (
+            {currentAnime.genres && currentAnime.genres.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-6 animate-fade-in-up" style={{ animationDelay: '0.45s' }}>
-                {currentAnime.genres.slice(0, 5).map((genre) => (
-                  <span key={genre} className="px-2.5 py-1 text-xs font-medium bg-white/[0.06] text-white/70 rounded-full border border-white/[0.08]">
-                    {genre}
-                  </span>
-                ))}
+                {currentAnime.genres.slice(0, 5).map((genre) => {
+                  const g = typeof genre === 'string' ? genre : genre?.name;
+                  return (
+                    <span key={g} className="px-2.5 py-1 text-xs font-medium bg-white/[0.06] text-white/70 rounded-full border border-white/[0.08]">
+                      {g}
+                    </span>
+                  );
+                })}
               </div>
             )}
 

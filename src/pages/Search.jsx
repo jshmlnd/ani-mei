@@ -6,6 +6,7 @@ import {
   getRecentAnime,
   getTopRatedAnime,
   getPopularAnime,
+  getGenreAnime,
 } from '../api/apiService';
 import AnimeCard from '../components/AnimeCard';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -37,22 +38,28 @@ export default function Search() {
         setPage(1);
 
         let result;
-        switch (type) {
-          case 'TRENDING':
-            result = await getTrendingAnime(1, 20);
-            break;
-          case 'NEW':
-            result = await getRecentAnime(1, 20);
-            break;
-          case 'TOP':
-            result = await getTopRatedAnime(1, 20);
-            break;
-          default:
-            if (query) {
-              result = await searchAnime(query, 1, 20);
-            } else {
-              result = await getPopularAnime(1, 20);
-            }
+        // Genre takes priority — stream API guarantees results exist
+        if (genre) {
+          const slug = genre.toLowerCase().replace(/\s+/g, '-');
+          result = await getGenreAnime(slug, 1, 20);
+        } else {
+          switch (type) {
+            case 'TRENDING':
+              result = await getTrendingAnime(1, 20);
+              break;
+            case 'NEW':
+              result = await getRecentAnime(1, 20);
+              break;
+            case 'TOP':
+              result = await getTopRatedAnime(1, 20);
+              break;
+            default:
+              if (query) {
+                result = await searchAnime(query, 1, 20);
+              } else {
+                result = await getPopularAnime(1, 20);
+              }
+          }
         }
 
         if (result && !controller.signal.aborted) {
@@ -76,22 +83,27 @@ export default function Search() {
       setPage(nextPage);
       try {
         let result;
-        switch (type) {
-          case 'TRENDING':
-            result = await getTrendingAnime(nextPage, 20);
-            break;
-          case 'NEW':
-            result = await getRecentAnime(nextPage, 20);
-            break;
-          case 'TOP':
-            result = await getTopRatedAnime(nextPage, 20);
-            break;
-          default:
-            if (query) {
-              result = await searchAnime(query, nextPage, 20);
-            } else {
-              result = await getPopularAnime(nextPage, 20);
-            }
+        if (genre) {
+          const slug = genre.toLowerCase().replace(/\s+/g, '-');
+          result = await getGenreAnime(slug, nextPage, 20);
+        } else {
+          switch (type) {
+            case 'TRENDING':
+              result = await getTrendingAnime(nextPage, 20);
+              break;
+            case 'NEW':
+              result = await getRecentAnime(nextPage, 20);
+              break;
+            case 'TOP':
+              result = await getTopRatedAnime(nextPage, 20);
+              break;
+            default:
+              if (query) {
+                result = await searchAnime(query, nextPage, 20);
+              } else {
+                result = await getPopularAnime(nextPage, 20);
+              }
+          }
         }
         if (result) {
           setAnimeList((prev) => [...prev, ...result.media]);
@@ -103,7 +115,7 @@ export default function Search() {
         setLoadingMore(false);
       }
     }
-  }, [pageInfo, loadingMore, page, type, query]);
+  }, [pageInfo, loadingMore, page, type, query, genre]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -117,11 +129,11 @@ export default function Search() {
   }, [loadMore, loadingMore, pageInfo]);
 
   const getTitle = () => {
-    if (query) return `Results for "${query}"`;
-    if (type === 'TRENDING') return 'Trending Anime';
-    if (type === 'NEW') return 'New Releases';
-    if (type === 'TOP') return 'Top Rated Anime';
     if (genre) return `${genre} Anime`;
+    if (query) return `Results for "${query}"`;
+    if (type === 'TRENDING') return 'New Releases';
+    if (type === 'NEW') return 'Latest Episodes';
+    if (type === 'TOP') return 'Just Completed';
     return 'All Anime';
   };
 

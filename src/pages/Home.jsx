@@ -107,8 +107,8 @@ export default function Home() {
       <div className="space-y-2">
         {showPopular && popular.length > 0 && (
           <AnimeRow
-            title="Popular Anime"
-            subtitle="Most watched right now"
+            title="New Releases"
+            subtitle="Fresh titles from AniKoto — guaranteed streamable"
             linkTo="/search?type=TRENDING"
             linkText="View All"
           >
@@ -122,8 +122,8 @@ export default function Home() {
 
         {showRecent && recent.length > 0 && (
           <AnimeRow
-            title="New Episodes"
-            subtitle="Recently updated episodes"
+            title="Latest Episodes"
+            subtitle="Recently updated on AniKoto"
             linkTo="/search?type=NEW"
             linkText="View All"
           >
@@ -153,8 +153,8 @@ export default function Home() {
 
         {showTopRated && topRated.length > 0 && (
           <AnimeRow
-            title="Top Rated"
-            subtitle="Highest rated anime of all time"
+            title="Just Completed"
+            subtitle="Finished airing — binge-ready"
             linkTo="/search?type=TOP"
             linkText="View All"
           >
