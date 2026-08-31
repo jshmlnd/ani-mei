@@ -5,10 +5,13 @@ import {
   getDisplayTitle,
   getEpisodeCount,
   getStreamUrl,
+  getAnimeServers,
+  getStreamByLinkId,
 } from '../api/apiService';
 import { stripHtml, formatDate } from '../utils/helpers';
 import VideoPlayer from '../components/VideoPlayer';
 import EpisodeSelector from '../components/EpisodeSelector';
+import ServerSelector from '../components/ServerSelector';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { AlertCircle, AlertTriangle, CircleOff } from 'lucide-react';
 
@@ -26,6 +29,14 @@ export default function Watch() {
   const [error, setError] = useState(null);
   const [showFullDesc, setShowFullDesc] = useState(false);
 
+  // server selector state — fetched from /servers/:slug/:episode
+  const [servers, setServers] = useState({});
+  const [flatServers, setFlatServers] = useState([]);
+  const [selectedServer, setSelectedServer] = useState(null);
+  const [serversLoading, setServersLoading] = useState(false);
+  const [serversError, setServersError] = useState(null);
+  const [resolvedSlug, setResolvedSlug] = useState('');
+
   useEffect(() => {
     const fetchAnime = async () => {
       try {
@@ -41,31 +52,113 @@ export default function Watch() {
     if (id) fetchAnime();
   }, [id]);
 
+  // Fetch servers for current episode via server-selector API
   useEffect(() => {
     if (!anime) return;
     let cancelled = false;
+    const fetchServers = async () => {
+      setServersLoading(true);
+      setServersError(null);
+      setServers({});
+      setFlatServers([]);
+      setSelectedServer(null);
+      // clear previous stream while new episode servers load
+      setStreamUrl('');
+      setStreamFallback('');
+      setStreamHeaders({});
+      setStreamError(null);
+      try {
+        const title = anime.title?.english || anime.title?.romaji || '';
+        const data = await getAnimeServers(title, episode);
+        if (cancelled) return;
+        const srv = data.servers || {};
+        const flat = data.flat || [];
+        setServers(srv);
+        setFlatServers(flat);
+        setResolvedSlug(data.slug || '');
+        // auto-pick best server: prefer SUB first, then first flat entry
+        const preferred = srv.sub?.[0] || srv.dub?.[0] || flat[0] || null;
+        if (preferred) {
+          setSelectedServer(preferred);
+        } else if (!flat.length && !Object.keys(srv).length) {
+          // No servers found — will fallback to legacy stream attempt in stream effect
+          setServersError(null);
+          // Trigger fallback path by not selecting; stream effect will handle fallback
+        }
+      } catch (e) {
+        if (!cancelled) setServersError(e?.message || 'Failed to load servers');
+      } finally {
+        if (!cancelled) setServersLoading(false);
+      }
+    };
+    fetchServers();
+    return () => { cancelled = true; };
+  }, [anime, episode]);
+
+  // Fetch stream for the selected server; fallback to legacy getStreamUrl if no servers
+  useEffect(() => {
+    if (!anime) return;
+    // If servers are still loading, wait
+    if (serversLoading) return;
+
+    let cancelled = false;
+
     const fetchStream = async () => {
       setStreamLoading(true);
       setStreamError(null);
       try {
-        const title = anime.title?.english || anime.title?.romaji || '';
-        const data = await getStreamUrl(title, episode);
-        if (!cancelled) {
+        if (selectedServer?.linkId) {
+          const data = await getStreamByLinkId(selectedServer.linkId);
+          if (cancelled) return;
+          if (data.m3u8 || data.embedUrl) {
+            setStreamUrl(data.m3u8 || '');
+            setStreamFallback(data.embedUrl || '');
+            setStreamHeaders(data.m3u8Headers || {});
+            return;
+          }
+          // server returned empty → fallback to legacy
+          throw new Error('Server returned no stream');
+        }
+
+        // No server selected (empty server list) → legacy fallback via getStreamUrl
+        // This keeps old behavior for titles where /servers returns nothing
+        if (!flatServers.length && Object.keys(servers).length === 0 && !serversLoading) {
+          const title = anime.title?.english || anime.title?.romaji || '';
+          const data = await getStreamUrl(title, episode);
+          if (cancelled) return;
           setStreamUrl(data.m3u8 || '');
           setStreamFallback(data.embedUrl || '');
           setStreamHeaders(data.m3u8Headers || {});
+          // if legacy also empty, we show unavailable (handled by render)
+          return;
         }
-      } catch {
-        if (!cancelled) {
-          setStreamError('Failed to load stream \u2014 try again later');
-        }
+
+        // Edge: servers exist but none selected yet
+        setStreamUrl('');
+        setStreamFallback('');
+      } catch (_err) {
+        void _err;
+        if (cancelled) return;
+        // Try legacy as last resort before showing error
+        try {
+          const title = anime.title?.english || anime.title?.romaji || '';
+          const fallback = await getStreamUrl(title, episode);
+          if (fallback?.m3u8 || fallback?.embedUrl) {
+            setStreamUrl(fallback.m3u8 || '');
+            setStreamFallback(fallback.embedUrl || '');
+            setStreamHeaders(fallback.m3u8Headers || {});
+            return;
+          }
+        } catch (_e) { void _e; }
+        setStreamError('Failed to load stream \u2014 try another server or episode');
       } finally {
         if (!cancelled) setStreamLoading(false);
       }
     };
+
     fetchStream();
     return () => { cancelled = true; };
-  }, [anime, episode]);
+  }, [anime, episode, selectedServer, servers, flatServers, serversLoading]);
 
   const handleEpisodeChange = (ep) => {
     setEpisode(ep);
@@ -96,11 +189,11 @@ export default function Watch() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-20 pb-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
           <div className="space-y-5">
-            {streamLoading ? (
+            {serversLoading || streamLoading ? (
               <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-xl flex items-center justify-center glow-shadow">
                 <div className="text-center">
                   <span className="loading loading-spinner loading-lg text-[var(--accent)]"></span>
-                  <p className="text-sm text-[var(--text-muted)] mt-3">Loading stream...</p>
+                  <p className="text-sm text-[var(--text-muted)] mt-3">{serversLoading ? 'Loading servers...' : 'Loading stream...'}</p>
                 </div>
               </div>
             ) : streamError ? (
@@ -129,6 +222,25 @@ export default function Watch() {
                 />
               </div>
             )}
+
+            <div className="glass-panel rounded-xl p-5">
+              <ServerSelector
+                servers={servers}
+                flat={flatServers}
+                selected={selectedServer}
+                onSelect={(srv) => {
+                  setSelectedServer(srv);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                loading={serversLoading}
+                error={serversError}
+              />
+              {resolvedSlug && !serversLoading && (
+                <p className="mt-3 text-[10px] text-[var(--text-muted)]/60 truncate">
+                  Source: {resolvedSlug}
+                </p>
+              )}
+            </div>
 
             <div className="glass-panel rounded-xl p-5">
               <div className="flex items-center gap-2 text-sm mb-3">

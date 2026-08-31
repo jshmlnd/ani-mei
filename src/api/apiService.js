@@ -41,7 +41,7 @@ function slugify(title) {
     .replace(/^-+|-+$/g, '');
 }
 
-async function searchStream(keyword) {
+export async function searchStream(keyword) {
   // New API: GET /search?q=keyword (AniMeiAPI – AnikotoTV)
   try {
     const api = `${STREAM_API}/search?q=${encodeURIComponent(keyword)}`;
@@ -107,7 +107,7 @@ async function getStream(slug, episode) {
             responseType: 'json',
           });
           embedUrl = streamData?.data?.url || streamData?.data?.raw?.url || '';
-        } catch {}
+        } catch (_e) { void _e; }
       }
       // Also try servers -> stream fallback if player url missing
       if (!embedUrl) {
@@ -121,7 +121,7 @@ async function getStream(slug, episode) {
               responseType: 'json',
             });
             embedUrl = sData?.data?.url || sData?.data?.raw?.url || '';
-          } catch {}
+          } catch (_e) { void _e; }
         }
       }
     }
@@ -148,7 +148,7 @@ async function getStream(slug, episode) {
         });
         embedUrl = sData?.data?.url || sData?.data?.raw?.url || '';
       }
-    } catch {}
+    } catch (_e) { void _e; }
   }
 
   // Legacy fallback: /api/v1/episode-stream
@@ -162,7 +162,7 @@ async function getStream(slug, episode) {
       if (streamData?.success && streamData?.data?.streaming_link) {
         embedUrl = streamData.data.streaming_link;
       }
-    } catch {}
+    } catch (_e) { void _e; }
   }
 
   if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
@@ -181,6 +181,134 @@ async function getStream(slug, episode) {
   }
 
   return { m3u8: '', embedUrl, m3u8Headers: {} };
+}
+
+export async function getServers(slug, episode) {
+  // Try /servers/:slug/:episode first — returns { servers: {sub, dub, raw, hsub...}, flat }
+  try {
+    const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
+    const { data: serversData } = await axios.get(rawProxyUrl(api), {
+      timeout: 15000,
+      responseType: 'json',
+    });
+    if (serversData?.success && serversData?.data) {
+      const d = serversData.data;
+      const servers = d.servers || {};
+      const flat = d.flat || d.flatServers || [];
+      // normalize: ensure every server has type field
+      if (Object.keys(servers).length || (Array.isArray(flat) && flat.length)) {
+        return { servers, flat, raw: d, source: 'servers', slug, episode };
+      }
+    }
+  } catch (e) {
+    const status = e?.response?.status;
+    if (status !== 404) console.warn('[getServers] /servers failed for', slug, episode, e?.message);
+  }
+
+  // Fallback to /player/:slug/:episode — also exposes servers
+  try {
+    const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
+    const { data: playerData } = await axios.get(rawProxyUrl(api), {
+      timeout: 15000,
+      responseType: 'json',
+    });
+    if (playerData?.success && playerData?.data) {
+      const d = playerData.data;
+      const servers = d.servers || {};
+      const flat = d.flatServers || d.flat || [];
+      if (Object.keys(servers).length || (Array.isArray(flat) && flat.length)) {
+        return { servers, flat, raw: d, source: 'player', slug, episode };
+      }
+    }
+  } catch (e) {
+    const status = e?.response?.status;
+    if (status !== 404) console.warn('[getServers] /player fallback failed for', slug, episode, e?.message);
+  }
+
+  return { servers: {}, flat: [], raw: null, source: 'none', slug, episode };
+}
+
+export async function getStreamByLinkId(linkId) {
+  if (!linkId) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
+  let embedUrl;
+  try {
+    const streamApi = `${STREAM_API}/stream/${encodeURIComponent(linkId)}`;
+    const { data: sData } = await axios.get(rawProxyUrl(streamApi), {
+      timeout: 15000,
+      responseType: 'json',
+    });
+    // stream endpoint returns { data: { url, iframe, raw: { url } } }
+    const d = sData?.data || {};
+    embedUrl =
+      d.url ||
+      d.raw?.url ||
+      d.iframe?.match(/src="([^"]+)"/)?.[1] ||
+      '';
+    if (!embedUrl) embedUrl = sData?.url || '';
+  } catch (e) {
+    console.warn('[getStreamByLinkId] /stream failed for', linkId?.slice(0, 20), e?.message);
+    return { m3u8: '', embedUrl: '', m3u8Headers: {} };
+  }
+
+  if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
+
+  try {
+    const m3u8Url = await extractM3u8FromEmbed(embedUrl);
+    if (m3u8Url) {
+      return { m3u8: proxyUrl(m3u8Url), embedUrl, m3u8Headers: {} };
+    }
+  } catch (e) {
+    console.error('[getStreamByLinkId] extractM3u8FromEmbed failed:', e);
+  }
+  return { m3u8: '', embedUrl, m3u8Headers: {} };
+}
+
+export async function resolveSlug(animeTitle) {
+  const results = await searchStream(animeTitle);
+  if (!results.length) return { slug: slugify(animeTitle), candidates: [], ranked: [] };
+  const lower = animeTitle.toLowerCase().trim();
+  const score = (t) => {
+    const tl = t.toLowerCase().trim();
+    if (tl === lower) return 0;
+    if (tl.startsWith(lower)) return 1;
+    if (tl.includes(lower)) return 2;
+    return 3;
+  };
+  const ranked = [...results].sort((a, b) => score(a.title) - score(b.title));
+  // prefer first 5 ranked as candidates
+  return { slug: ranked[0]?.id || slugify(animeTitle), candidates: results, ranked: ranked.slice(0, 5) };
+}
+
+export async function getAnimeServers(animeTitle, episode) {
+  // Resolve slug via search ranking, then probe servers for each candidate until we find one with servers
+  let lastSlug = slugify(animeTitle);
+  try {
+    const { ranked, slug: bestSlug } = await resolveSlug(animeTitle);
+    lastSlug = bestSlug;
+    if (ranked.length) {
+      for (const cand of ranked) {
+        if (!cand.id) continue;
+        const res = await getServers(cand.id, episode);
+        if (res.flat?.length || Object.keys(res.servers || {}).length) {
+          return { ...res, candidates: ranked, resolvedTitle: cand.title };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[getAnimeServers] resolve failed:', e?.message);
+  }
+  // fallback to best slug / direct slug
+  const fallback = await getServers(lastSlug, episode);
+  if (fallback.flat?.length || Object.keys(fallback.servers || {}).length) {
+    return { ...fallback, candidates: [], resolvedTitle: animeTitle };
+  }
+  // last try: also try slugify if different
+  const directSlug = slugify(animeTitle);
+  if (directSlug !== lastSlug) {
+    const direct = await getServers(directSlug, episode);
+    return { ...direct, candidates: [], resolvedTitle: animeTitle };
+  }
+  return fallback;
 }
 
 const MEDIA_FIELDS = `
