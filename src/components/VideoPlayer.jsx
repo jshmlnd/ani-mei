@@ -183,13 +183,23 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              if (hlsRetryRef.current < MAX_HLS_RETRIES) {
+              if (data.details === 'manifestLoadError' || data.details === 'fragLoadError') {
+                if (hlsRetryRef.current < MAX_HLS_RETRIES) {
+                  hlsRetryRef.current++;
+                  hls.startLoad();
+                } else if (fallbackSrc) {
+                  switchToIframe();
+                } else {
+                  setError('Stream blocked by CDN (403) — try a different server or episode');
+                  hls.destroy();
+                }
+              } else if (hlsRetryRef.current < MAX_HLS_RETRIES) {
                 hlsRetryRef.current++;
                 hls.startLoad();
               } else if (fallbackSrc) {
                 switchToIframe();
               } else {
-                setError(`Network error (code ${data.details || 'unknown'})`);
+                setError(`Network error: ${data.details || 'connection failed'}`);
                 hls.destroy();
               }
               break;
@@ -200,12 +210,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
               } else if (fallbackSrc) {
                 switchToIframe();
               } else {
-                setError(`Media decode error (code ${data.details || 'unknown'})`);
+                setError('Video decode error — try a different quality or server');
                 hls.destroy();
               }
               break;
             default:
-              setError(`Playback error (type ${data.type}, code ${data.details || 'unknown'})`);
+              setError(`Playback error: ${data.details || 'unknown'}`);
               hls.destroy();
               break;
           }
@@ -636,13 +646,18 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <AlertTriangle className="w-16 h-16 mx-auto text-red-400/60 mb-4" />
             <p className="text-white text-lg font-semibold mb-2">Video Unavailable</p>
             <p className="text-gray-400 text-sm mb-4">{error}</p>
-            <div className="flex gap-2 justify-center">
-              <button className="btn btn-sm btn-primary" onClick={() => { setError(null); setIsLoading(true); initHls(); }}>
-                Try Again
-              </button>
-              <button className="btn btn-sm btn-ghost text-gray-400" onClick={() => window.location.reload()}>
-                Reload Page
-              </button>
+            <div className="flex flex-col gap-2 items-center">
+              <div className="flex gap-2 justify-center">
+                <button className="btn btn-sm btn-primary" onClick={() => { setError(null); setIsLoading(true); initHls(); }}>
+                  Try Again
+                </button>
+                <button className="btn btn-sm btn-ghost text-gray-400" onClick={() => window.location.reload()}>
+                  Reload Page
+                </button>
+              </div>
+              {(error.includes('403') || error.includes('blocked') || error.includes('CDN')) && (
+                <p className="text-gray-500 text-xs mt-1">Tip: Select a different server below, or try another episode</p>
+              )}
             </div>
           </div>
         </div>

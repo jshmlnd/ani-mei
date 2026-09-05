@@ -19,18 +19,60 @@ async function extractM3u8FromEmbed(embedUrl) {
     responseType: 'text',
     transformResponse: [(d) => d],
   });
-  const match = html.match(/"sourceUrl"\s*:\s*"([^"]+)"/);
-  if (!match) return null;
-  const sourceUrl = match[1].startsWith('http')
-    ? match[1]
-    : `${new URL(embedUrl).origin}${match[1]}`;
-  const { data: sourceData } = await axios.get(rawProxyUrl(sourceUrl), {
-    timeout: 10000,
-    headers: { Accept: 'application/json' },
-  });
-  if (sourceData?.status === 'ok' && sourceData?.source) {
-    return sourceData.source;
+
+  // Pattern 1: "sourceUrl": "https://..." (existing)
+  const sourceUrlMatch = html.match(/"sourceUrl"\s*:\s*"([^"]+)"/);
+  if (sourceUrlMatch) {
+    const sourceUrl = sourceUrlMatch[1].startsWith('http')
+      ? sourceUrlMatch[1]
+      : `${new URL(embedUrl).origin}${sourceUrlMatch[1]}`;
+    try {
+      const { data: sourceData } = await axios.get(rawProxyUrl(sourceUrl), {
+        timeout: 10000,
+        headers: { Accept: 'application/json' },
+      });
+      if (sourceData?.status === 'ok' && sourceData?.source) {
+        return sourceData.source;
+      }
+    } catch { /* continue to next pattern */ }
   }
+
+  // Pattern 2: Direct m3u8 URL in source/src/file property
+  const directM3u8 = html.match(/(?:source|src|file|url)\s*[:=]\s*["']([^"']*\.m3u8[^"']*?)["']/i);
+  if (directM3u8) {
+    const m3u8Url = directM3u8[1].startsWith('http')
+      ? directM3u8[1]
+      : `${new URL(embedUrl).origin}${directM3u8[1]}`;
+    return m3u8Url;
+  }
+
+  // Pattern 3: HLS source in JSON config (e.g., sources: [{file: "..."}])
+  const jsonConfigMatch = html.match(/(?:sources|playlist)\s*[:=]\s*\[?\{[^}]*file\s*:\s*["']([^"']*\.m3u8[^"']*?)["']/i);
+  if (jsonConfigMatch) {
+    const m3u8Url = jsonConfigMatch[1].startsWith('http')
+      ? jsonConfigMatch[1]
+      : `${new URL(embedUrl).origin}${jsonConfigMatch[1]}`;
+    return m3u8Url;
+  }
+
+  // Pattern 4: data-src or data-url attributes with m3u8
+  const dataSrcMatch = html.match(/data-(?:src|url|video)\s*=\s*["']([^"']*\.m3u8[^"']*?)["']/i);
+  if (dataSrcMatch) {
+    const m3u8Url = dataSrcMatch[1].startsWith('http')
+      ? dataSrcMatch[1]
+      : `${new URL(embedUrl).origin}${dataSrcMatch[1]}`;
+    return m3u8Url;
+  }
+
+  // Pattern 5: HLS.js source assignment (e.g., hls.loadSource("..."))
+  const hlsSourceMatch = html.match(/(?:loadSource|src)\s*\(\s*["']([^"']*\.m3u8[^"']*?)["']/i);
+  if (hlsSourceMatch) {
+    const m3u8Url = hlsSourceMatch[1].startsWith('http')
+      ? hlsSourceMatch[1]
+      : `${new URL(embedUrl).origin}${hlsSourceMatch[1]}`;
+    return m3u8Url;
+  }
+
   return null;
 }
 

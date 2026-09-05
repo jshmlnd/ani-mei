@@ -16,10 +16,32 @@ export async function onRequest(context) {
   const headers = h ? JSON.parse(decodeURIComponent(h)) : {};
 
   try {
+    // Determine the correct Referer/Origin based on the target domain
+    let referer = headers.Referer;
+    let origin = headers.Origin;
+    if (!referer || !origin) {
+      try {
+        const parsedTarget = new URL(targetUrl);
+        if (parsedTarget.hostname.includes('kryntal.top')) {
+          referer = referer || 'https://www.anikoto.tv/';
+          origin = origin || 'https://www.anikoto.tv';
+        } else if (parsedTarget.hostname.includes('megavid') || parsedTarget.hostname.includes('buzz')) {
+          referer = referer || 'https://megavid.buzz/';
+          origin = origin || 'https://megavid.buzz';
+        } else {
+          referer = referer || `${parsedTarget.origin}/`;
+          origin = origin || parsedTarget.origin;
+        }
+      } catch {
+        referer = referer || 'https://megavid.buzz/';
+        origin = origin || 'https://megavid.buzz';
+      }
+    }
+
     const fetchHeaders = {
-      'Referer': headers.Referer || 'https://megavid.buzz/',
-      'Origin': headers.Origin || 'https://megavid.buzz',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': referer,
+      'Origin': origin,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       'Accept': '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
     };
@@ -27,7 +49,31 @@ export async function onRequest(context) {
     if (headers['Accept-Ranges']) fetchHeaders['Accept-Ranges'] = headers['Accept-Ranges'];
     if (headers.Accept) fetchHeaders['Accept'] = headers.Accept;
 
-    const upstream = await fetch(targetUrl, { headers: fetchHeaders });
+    let upstream = await fetch(targetUrl, { headers: fetchHeaders });
+
+    // If 403, retry with alternative headers (CDN may require specific referer)
+    if (upstream.status === 403) {
+      try {
+        const parsedTarget = new URL(targetUrl);
+        const altReferers = [
+          `${parsedTarget.origin}/`,
+          'https://www.google.com/',
+          'https://anikoto.tv/',
+          'https://megavid.buzz/',
+        ].filter((r) => r !== referer);
+
+        for (const altRef of altReferers) {
+          const altHeaders = { ...fetchHeaders, Referer: altRef, Origin: parsedTarget.origin };
+          const altUpstream = await fetch(targetUrl, { headers: altHeaders });
+          if (altUpstream.ok) {
+            upstream = altUpstream;
+            break;
+          }
+        }
+      } catch {
+        // ignore retry errors, fall through with original 403
+      }
+    }
 
     if (!upstream.ok) {
       return new Response(JSON.stringify({
