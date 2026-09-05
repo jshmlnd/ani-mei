@@ -5,12 +5,37 @@ const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://animeiapi.jo
 
 const PROXY_BASE = '/api/proxy';
 
+// Retry configuration
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+const RETRY_STATUS_CODES = [408, 429, 500, 502, 503, 504];
+
 function proxyUrl(targetUrl, extra = '') {
   return `${PROXY_BASE}?url=${encodeURIComponent(targetUrl)}${extra}`;
 }
 
-function rawProxyUrl(targetUrl) {
-  return proxyUrl(targetUrl, '&raw=1');
+function rawProxyUrl(targetUrl, extraParams = '') {
+  return proxyUrl(targetUrl, `&raw=1${extraParams}`);
+}
+
+/**
+ * Wrapper for axios requests with retry logic
+ */
+async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
+  try {
+    const response = await axios.get(url, options);
+    return response;
+  } catch (error) {
+    const status = error?.response?.status;
+    const isRetryable = RETRY_STATUS_CODES.includes(status) || !error?.response; // retry on network errors too
+    
+    if (isRetryable && retries > 0) {
+      console.warn(`[fetchWithRetry] Request failed (${status || 'network error'}), retrying... (${retries} left)`, url);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
 }
 
 function isDirectM3u8(url) {
@@ -55,7 +80,7 @@ function normalizeWatchData(payload, slug, episode) {
 async function getWatchData(slug, episode) {
   const episodePath = String(episode).startsWith('ep-') ? episode : `ep-${episode}`;
   const api = `${STREAM_API}/watch/${encodeURIComponent(slug)}/${episodePath}`;
-  const { data } = await axios.get(rawProxyUrl(api), {
+  const { data } = await fetchWithRetry(rawProxyUrl(api), {
     timeout: 20000,
     responseType: 'json',
   });
@@ -64,7 +89,7 @@ async function getWatchData(slug, episode) {
 
 async function extractM3u8FromEmbed(embedUrl, headers = {}) {
   const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-  const { data: html } = await axios.get(`${PROXY_BASE}?url=${encodeURIComponent(embedUrl)}&h=${encodedHeaders}`, {
+  const { data: html } = await fetchWithRetry(rawProxyUrl(embedUrl, `&h=${encodedHeaders}`), {
     timeout: 10000,
     responseType: 'text',
     transformResponse: [(d) => d],
@@ -77,7 +102,7 @@ async function extractM3u8FromEmbed(embedUrl, headers = {}) {
       ? sourceUrlMatch[1]
       : `${new URL(embedUrl).origin}${sourceUrlMatch[1]}`;
     try {
-      const { data: sourceData } = await axios.get(rawProxyUrl(sourceUrl), {
+      const { data: sourceData } = await fetchWithRetry(rawProxyUrl(sourceUrl), {
         timeout: 10000,
         headers: { Accept: 'application/json' },
       });
@@ -137,7 +162,7 @@ export async function searchStream(keyword) {
   // New API: GET /search?q=keyword (AniMeiAPI – AnikotoTV)
   try {
     const api = `${STREAM_API}/search?q=${encodeURIComponent(keyword)}`;
-    const { data } = await axios.get(rawProxyUrl(api), {
+    const { data } = await fetchWithRetry(rawProxyUrl(api), {
       timeout: 15000,
       responseType: 'json',
     });
@@ -158,7 +183,7 @@ export async function searchStream(keyword) {
   // Fallback to legacy endpoint for backwards-compat
   try {
     const api = `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`;
-    const { data } = await axios.get(rawProxyUrl(api), {
+    const { data } = await fetchWithRetry(rawProxyUrl(api), {
       timeout: 15000,
       responseType: 'json',
     });
@@ -181,7 +206,7 @@ async function getStream(slug, episode, headers = {}) {
     embedUrl = watch.playerUrl;
     if (!embedUrl && watch.playerLinkId) {
       const streamApi = `${STREAM_API}/stream/${encodeURIComponent(watch.playerLinkId)}`;
-      const { data: streamData } = await axios.get(rawProxyUrl(streamApi), {
+      const { data: streamData } = await fetchWithRetry(rawProxyUrl(streamApi), {
         timeout: 15000,
         responseType: 'json',
       });
@@ -195,7 +220,7 @@ async function getStream(slug, episode, headers = {}) {
   // Legacy fallback: GET /player/:slug/:episode.
   if (!embedUrl) try {
     const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
-    const { data: playerData } = await axios.get(rawProxyUrl(api), {
+    const { data: playerData } = await fetchWithRetry(rawProxyUrl(api), {
       timeout: 20000,
       responseType: 'json',
     });
@@ -205,7 +230,7 @@ async function getStream(slug, episode, headers = {}) {
       if (!embedUrl && playerData.data.linkId) {
         try {
           const streamApi = `${STREAM_API}/stream/${encodeURIComponent(playerData.data.linkId)}`;
-          const { data: streamData } = await axios.get(rawProxyUrl(streamApi), {
+          const { data: streamData } = await fetchWithRetry(rawProxyUrl(streamApi), {
             timeout: 15000,
             responseType: 'json',
           });
@@ -219,7 +244,7 @@ async function getStream(slug, episode, headers = {}) {
         if (first?.linkId) {
           try {
             const streamApi = `${STREAM_API}/stream/${encodeURIComponent(first.linkId)}`;
-            const { data: sData } = await axios.get(rawProxyUrl(streamApi), {
+            const { data: sData } = await fetchWithRetry(rawProxyUrl(streamApi), {
               timeout: 15000,
               responseType: 'json',
             });
@@ -237,7 +262,7 @@ async function getStream(slug, episode, headers = {}) {
   if (!embedUrl) {
     try {
       const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
-      const { data: serversData } = await axios.get(rawProxyUrl(api), {
+      const { data: serversData } = await fetchWithRetry(rawProxyUrl(api), {
         timeout: 15000,
         responseType: 'json',
       });
@@ -245,7 +270,7 @@ async function getStream(slug, episode, headers = {}) {
       const first = Array.isArray(flat) ? flat[0] : null;
       if (first?.linkId) {
         const streamApi = `${STREAM_API}/stream/${encodeURIComponent(first.linkId)}`;
-        const { data: sData } = await axios.get(rawProxyUrl(streamApi), {
+        const { data: sData } = await fetchWithRetry(rawProxyUrl(streamApi), {
           timeout: 15000,
           responseType: 'json',
         });
@@ -258,7 +283,7 @@ async function getStream(slug, episode, headers = {}) {
   if (!embedUrl) {
     try {
       const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
-      const { data: streamData } = await axios.get(rawProxyUrl(api), {
+      const { data: streamData } = await fetchWithRetry(rawProxyUrl(api), {
         timeout: 20000,
         responseType: 'json',
       });
@@ -310,7 +335,7 @@ export async function getServers(slug, episode) {
   // Legacy fallback: /servers/:slug/:episode
   try {
     const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
-    const { data: serversData } = await axios.get(rawProxyUrl(api), {
+    const { data: serversData } = await fetchWithRetry(rawProxyUrl(api), {
       timeout: 15000,
       responseType: 'json',
     });
@@ -331,7 +356,7 @@ export async function getServers(slug, episode) {
   // Fallback to /player/:slug/:episode — also exposes servers
   try {
     const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
-    const { data: playerData } = await axios.get(rawProxyUrl(api), {
+    const { data: playerData } = await fetchWithRetry(rawProxyUrl(api), {
       timeout: 15000,
       responseType: 'json',
     });
@@ -356,7 +381,7 @@ export async function getStreamByLinkId(linkId, headers = {}) {
   let embedUrl;
   try {
     const streamApi = `${STREAM_API}/stream/${encodeURIComponent(linkId)}`;
-    const { data: sData } = await axios.get(rawProxyUrl(streamApi), {
+    const { data: sData } = await fetchWithRetry(rawProxyUrl(streamApi), {
       timeout: 15000,
       responseType: 'json',
     });
@@ -625,11 +650,11 @@ async function fetchStreamList(endpoint, page = 1, perPage = 20) {
     // Try direct fetch first (CORS-enabled worker), fallback to proxy for strict environments
     let data;
     try {
-      const res = await axios.get(url, { timeout: 15000, responseType: 'json' });
+      const res = await fetchWithRetry(url, { timeout: 15000, responseType: 'json' });
       data = res.data;
     } catch {
       // Fallback via proxy
-      const res = await axios.get(rawProxyUrl(url), { timeout: 15000, responseType: 'json' });
+      const res = await fetchWithRetry(rawProxyUrl(url), { timeout: 15000, responseType: 'json' });
       data = res.data;
     }
     if (!data?.success || !data?.data) throw new Error('No stream list data');
@@ -657,10 +682,10 @@ async function fetchStreamSearch(keyword, page = 1, perPage = 20) {
   try {
     let data;
     try {
-      const res = await axios.get(url, { timeout: 15000, responseType: 'json' });
+      const res = await fetchWithRetry(url, { timeout: 15000, responseType: 'json' });
       data = res.data;
     } catch {
-      const res2 = await axios.get(rawProxyUrl(url), { timeout: 15000, responseType: 'json' });
+      const res2 = await fetchWithRetry(rawProxyUrl(url), { timeout: 15000, responseType: 'json' });
       data = res2.data;
     }
     if (!data?.success || !data?.data) throw new Error('No search data');
@@ -745,11 +770,11 @@ export async function getUpcomingAnime(page = 1, perPage = 20) { return fetchStr
 
 export async function getStreamGenres() {
   try {
-    const { data } = await axios.get(`${STREAM_API}/genres`, { timeout: 10000, responseType: 'json' });
+    const { data } = await fetchWithRetry(`${STREAM_API}/genres`, { timeout: 10000, responseType: 'json' });
     return data?.data?.genres || data?.data || [];
   } catch {
     try {
-      const { data } = await axios.get(rawProxyUrl(`${STREAM_API}/genres`), { timeout: 10000, responseType: 'json' });
+      const { data } = await fetchWithRetry(rawProxyUrl(`${STREAM_API}/genres`), { timeout: 10000, responseType: 'json' });
       return data?.data?.genres || data?.data || [];
     } catch { return []; }
   }
@@ -805,11 +830,11 @@ export async function getStreamAnimeDetails(slug) {
   for (const ep of endpoints) {
     let data;
     try {
-      const res = await axios.get(`${STREAM_API}${ep}`, { timeout: 15000, responseType: 'json' });
+      const res = await fetchWithRetry(`${STREAM_API}${ep}`, { timeout: 15000, responseType: 'json' });
       data = res.data;
     } catch {
       try {
-        const res2 = await axios.get(rawProxyUrl(`${STREAM_API}${ep}`), { timeout: 15000, responseType: 'json' });
+        const res2 = await fetchWithRetry(rawProxyUrl(`${STREAM_API}${ep}`), { timeout: 15000, responseType: 'json' });
         data = res2.data;
       } catch { continue; }
     }

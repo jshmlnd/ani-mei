@@ -19,29 +19,58 @@ export async function onRequest(context) {
     // Determine the correct Referer/Origin based on the target domain
     let referer = headers.Referer;
     let origin = headers.Origin;
-    if (!referer || !origin) {
-      try {
-        const parsedTarget = new URL(targetUrl);
-        if (parsedTarget.hostname.includes('kryntal.top')) {
+    let isApiDomain = false;
+    let isEmbedDomain = false;
+    
+    try {
+      const parsedTarget = new URL(targetUrl);
+      const hostname = parsedTarget.hostname;
+      
+      // Check if it's a known API domain (allow JSON responses)
+      if (hostname.includes('animeiapi.joshuaklein-malonda.workers.dev') ||
+          hostname.includes('anikototv') ||
+          hostname.includes('anilist.co')) {
+        isApiDomain = true;
+      }
+      
+      // Check if it's a known embed domain (allow HTML responses)
+      if (hostname.includes('echovideo') ||
+          hostname.includes('megavid') ||
+          hostname.includes('buzz') ||
+          hostname.includes('myvidplay') ||
+          hostname.includes('kryntal') ||
+          hostname.includes('gn1r5n') ||
+          hostname.includes('play.echovideo') ||
+          hostname.includes('vidplay') ||
+          hostname.includes('stream') ||
+          hostname.includes('embed')) {
+        isEmbedDomain = true;
+      }
+      
+      if (!referer || !origin) {
+        if (hostname.includes('kryntal.top')) {
           referer = referer || 'https://www.aniwaves.ru/';
           origin = origin || 'https://www.aniwaves.ru';
-        } else if (parsedTarget.hostname.includes('megavid') || parsedTarget.hostname.includes('buzz')) {
+        } else if (hostname.includes('megavid') || hostname.includes('buzz')) {
           referer = referer || 'https://megavid.buzz/';
           origin = origin || 'https://megavid.buzz';
-        } else if (parsedTarget.hostname.includes('myvidplay')) {
+        } else if (hostname.includes('myvidplay')) {
           referer = referer || 'https://aniwaves.ru/';
           origin = origin || 'https://aniwaves.ru';
-        } else if (parsedTarget.hostname.includes('echovideo')) {
+        } else if (hostname.includes('echovideo')) {
           referer = referer || 'https://aniwaves.ru/';
           origin = origin || 'https://aniwaves.ru';
+        } else if (hostname.includes('gn1r5n')) {
+          referer = referer || 'https://gn1r5n.org/';
+          origin = origin || 'https://gn1r5n.org';
         } else {
           referer = referer || `${parsedTarget.origin}/`;
           origin = origin || parsedTarget.origin;
         }
-      } catch {
-        referer = referer || 'https://megavid.buzz/';
-        origin = origin || 'https://megavid.buzz';
       }
+    } catch {
+      referer = referer || 'https://megavid.buzz/';
+      origin = origin || 'https://megavid.buzz';
     }
 
     const fetchHeaders = {
@@ -55,7 +84,19 @@ export async function onRequest(context) {
     if (headers['Accept-Ranges']) fetchHeaders['Accept-Ranges'] = headers['Accept-Ranges'];
     if (headers.Accept) fetchHeaders['Accept'] = headers.Accept;
 
-    let upstream = await fetch(targetUrl, { headers: fetchHeaders });
+    // Add timeout for upstream requests (25 seconds to stay within Vercel 30s limit)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    
+    let upstream;
+    try {
+      upstream = await fetch(targetUrl, { 
+        headers: fetchHeaders,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     // If 403, retry with alternative headers (CDN may require specific referer)
     if (upstream.status === 403) {
@@ -66,14 +107,24 @@ export async function onRequest(context) {
           'https://www.google.com/',
           'https://aniwaves.ru/',
           'https://megavid.buzz/',
+          'https://gn1r5n.org/',
         ].filter((r) => r !== referer);
 
         for (const altRef of altReferers) {
           const altHeaders = { ...fetchHeaders, Referer: altRef, Origin: parsedTarget.origin };
-          const altUpstream = await fetch(targetUrl, { headers: altHeaders });
-          if (altUpstream.ok) {
-            upstream = altUpstream;
-            break;
+          const altController = new AbortController();
+          const altTimeoutId = setTimeout(() => altController.abort(), 10000);
+          try {
+            const altUpstream = await fetch(targetUrl, { 
+              headers: altHeaders,
+              signal: altController.signal,
+            });
+            if (altUpstream.ok) {
+              upstream = altUpstream;
+              break;
+            }
+          } finally {
+            clearTimeout(altTimeoutId);
           }
         }
       } catch {
@@ -143,6 +194,30 @@ export async function onRequest(context) {
       }), {
         status: 502,
         headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Allow JSON responses for API domains
+    if (isApiDomain && contentType.includes('application/json')) {
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': contentType || 'application/json',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
+    // Allow HTML responses for embed domains (for parsing)
+    if (isEmbedDomain && contentType.includes('text/html')) {
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': contentType || 'text/html',
+          'Cache-Control': 'no-store',
+        },
       });
     }
 
