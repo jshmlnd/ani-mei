@@ -583,6 +583,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         <iframe
           src={iframeSrc}
           className="w-full aspect-video border-0"
+          sandbox="allow-scripts allow-same-origin allow-presentation"
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture"
           onLoad={() => setIsLoading(false)}
