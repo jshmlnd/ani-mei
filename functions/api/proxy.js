@@ -23,11 +23,14 @@ export async function onRequest(context) {
       try {
         const parsedTarget = new URL(targetUrl);
         if (parsedTarget.hostname.includes('kryntal.top')) {
-          referer = referer || 'https://www.anikoto.tv/';
-          origin = origin || 'https://www.anikoto.tv';
+          referer = referer || 'https://www.aniwaves.ru/';
+          origin = origin || 'https://www.aniwaves.ru';
         } else if (parsedTarget.hostname.includes('megavid') || parsedTarget.hostname.includes('buzz')) {
           referer = referer || 'https://megavid.buzz/';
           origin = origin || 'https://megavid.buzz';
+        } else if (parsedTarget.hostname.includes('myvidplay')) {
+          referer = referer || 'https://aniwaves.ru/';
+          origin = origin || 'https://aniwaves.ru';
         } else {
           referer = referer || `${parsedTarget.origin}/`;
           origin = origin || parsedTarget.origin;
@@ -58,7 +61,7 @@ export async function onRequest(context) {
         const altReferers = [
           `${parsedTarget.origin}/`,
           'https://www.google.com/',
-          'https://anikoto.tv/',
+          'https://aniwaves.ru/',
           'https://megavid.buzz/',
         ].filter((r) => r !== referer);
 

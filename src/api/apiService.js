@@ -58,8 +58,9 @@ async function getWatchData(slug, episode) {
   return normalizeWatchData(data, slug, episode);
 }
 
-async function extractM3u8FromEmbed(embedUrl) {
-  const { data: html } = await axios.get(rawProxyUrl(embedUrl), {
+async function extractM3u8FromEmbed(embedUrl, headers = {}) {
+  const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
+  const { data: html } = await axios.get(`${PROXY_BASE}?url=${encodeURIComponent(embedUrl)}&h=${encodedHeaders}`, {
     timeout: 10000,
     responseType: 'text',
     transformResponse: [(d) => d],
@@ -168,7 +169,7 @@ export async function searchStream(keyword) {
   }
 }
 
-async function getStream(slug, episode) {
+async function getStream(slug, episode, headers = {}) {
   // New API flow: GET /watch/:slug/:episode -> unified player/server response.
   let embedUrl = '';
   try {
@@ -266,19 +267,19 @@ async function getStream(slug, episode) {
   if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
 
   try {
-    const m3u8Url = await extractM3u8FromEmbed(embedUrl);
+    const m3u8Url = await extractM3u8FromEmbed(embedUrl, headers);
     if (m3u8Url) {
       return {
         m3u8: proxyUrl(m3u8Url),
         embedUrl,
-        m3u8Headers: {},
+        m3u8Headers: headers,
       };
     }
   } catch (e) {
     console.error('[stream] extractM3u8FromEmbed failed:', e);
   }
 
-  return { m3u8: '', embedUrl, m3u8Headers: {} };
+  return { m3u8: '', embedUrl, m3u8Headers: headers };
 }
 
 export async function getServers(slug, episode) {
@@ -337,7 +338,7 @@ export async function getServers(slug, episode) {
   return { servers: {}, flat: [], raw: null, source: 'none', slug, episode };
 }
 
-export async function getStreamByLinkId(linkId) {
+export async function getStreamByLinkId(linkId, headers = {}) {
   if (!linkId) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
   let embedUrl;
   try {
@@ -362,14 +363,14 @@ export async function getStreamByLinkId(linkId) {
   if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
 
   try {
-    const m3u8Url = await extractM3u8FromEmbed(embedUrl);
+    const m3u8Url = await extractM3u8FromEmbed(embedUrl, headers);
     if (m3u8Url) {
-      return { m3u8: proxyUrl(m3u8Url), embedUrl, m3u8Headers: {} };
+      return { m3u8: proxyUrl(m3u8Url), embedUrl, m3u8Headers: headers };
     }
   } catch (e) {
     console.error('[getStreamByLinkId] extractM3u8FromEmbed failed:', e);
   }
-  return { m3u8: '', embedUrl, m3u8Headers: {} };
+  return { m3u8: '', embedUrl, m3u8Headers: headers };
 }
 
 export async function resolveSlug(animeTitle) {
@@ -884,7 +885,7 @@ export function getEpisodeCount(media) {
   return 24;
 }
 
-export async function getStreamUrl(animeTitle, episode) {
+export async function getStreamUrl(animeTitle, episode, headers = {}) {
   let lastError;
 
   // Search first – slugify('Attack on Titan') -> 'attack-on-titan' always 404 (needs suffix like -bgaoa)
@@ -906,7 +907,7 @@ export async function getStreamUrl(animeTitle, episode) {
       for (const cand of ranked.slice(0, 5)) {
         if (!cand.id) continue;
         try {
-          const r = await getStream(cand.id, episode);
+          const r = await getStream(cand.id, episode, headers);
           if (r?.m3u8 || r?.embedUrl) return r;
           candidateError = new Error(`No stream for ${cand.title} (${cand.id})`);
           lastError = candidateError;
@@ -924,7 +925,7 @@ export async function getStreamUrl(animeTitle, episode) {
 
   // Fallback to direct slugified title (for already-correct slugs like "one-piece-155")
   try {
-    const direct = await getStream(slugify(animeTitle), episode);
+    const direct = await getStream(slugify(animeTitle), episode, headers);
     if (direct?.m3u8 || direct?.embedUrl) return direct;
     if (!lastError) lastError = new Error(`No stream for slugified title ${slugify(animeTitle)}`);
   } catch (err) {

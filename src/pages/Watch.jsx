@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   getAnimeById,
@@ -24,6 +24,7 @@ export default function Watch() {
   const [streamUrl, setStreamUrl] = useState('');
   const [streamFallback, setStreamFallback] = useState('');
   const [streamHeaders, setStreamHeaders] = useState({});
+  const streamHeadersRef = useRef(streamHeaders);
   const [streamLoading, setStreamLoading] = useState(false);
   const [streamError, setStreamError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -127,7 +128,7 @@ export default function Watch() {
       setStreamError(null);
       try {
         if (selectedServer?.linkId) {
-          const data = await getStreamByLinkId(selectedServer.linkId);
+          const data = await getStreamByLinkId(selectedServer.linkId, streamHeadersRef.current);
           if (cancelled) return;
           if (data.m3u8 || data.embedUrl) {
             setStreamUrl(data.m3u8 || '');
@@ -143,7 +144,7 @@ export default function Watch() {
         // This keeps old behavior for titles where /servers returns nothing
         if (!flatServers.length && Object.keys(servers).length === 0 && !serversLoading) {
           const title = anime.title?.english || anime.title?.romaji || '';
-          const data = await getStreamUrl(title, episode);
+          const data = await getStreamUrl(title, episode, streamHeadersRef.current);
           if (cancelled) return;
           setStreamUrl(data.m3u8 || '');
           setStreamFallback(data.embedUrl || '');
@@ -161,7 +162,7 @@ export default function Watch() {
         // Try legacy as last resort before showing error
         try {
           const title = anime.title?.english || anime.title?.romaji || '';
-          const fallback = await getStreamUrl(title, episode);
+          const fallback = await getStreamUrl(title, episode, streamHeadersRef.current);
           if (fallback?.m3u8 || fallback?.embedUrl) {
             setStreamUrl(fallback.m3u8 || '');
             setStreamFallback(fallback.embedUrl || '');
@@ -178,6 +179,11 @@ export default function Watch() {
     fetchStream();
     return () => { cancelled = true; };
   }, [anime, episode, selectedServer, servers, flatServers, serversLoading]);
+
+  // Keep the ref in sync with streamHeaders state
+  useEffect(() => {
+    streamHeadersRef.current = streamHeaders;
+  }, [streamHeaders]);
 
   const handleEpisodeChange = (ep) => {
     setEpisode(ep);
