@@ -18,6 +18,9 @@
   "functions": {
     "api/proxy.js": {
       "maxDuration": 30
+    },
+    "api/adBlocker.js": {
+      "maxDuration": 30
     }
   }
 }

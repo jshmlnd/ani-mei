@@ -59,6 +59,11 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
   }, []);
 
+  const getAdBlockerUrl = useCallback((embedUrl) => {
+    if (!embedUrl) return embedUrl;
+    return `/api/adBlocker?url=${encodeURIComponent(embedUrl)}`;
+  }, []);
+
   const switchToIframe = useCallback(() => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -572,7 +577,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         </div>
       );
     }
-    const iframeSrc = useIframe ? (fallbackSrc || src) : src;
+    const rawIframeSrc = useIframe ? (fallbackSrc || src) : src;
+    const iframeSrc = rawIframeSrc ? getAdBlockerUrl(rawIframeSrc) : rawIframeSrc;
     return (
       <div className="relative bg-black rounded-lg overflow-hidden" ref={containerRef}>
         {title && (
