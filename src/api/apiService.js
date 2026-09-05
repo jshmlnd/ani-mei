@@ -13,6 +13,10 @@ function rawProxyUrl(targetUrl) {
   return proxyUrl(targetUrl, '&raw=1');
 }
 
+function isDirectM3u8(url) {
+  return url && (/\.m3u8($|\?)/i.test(url) || /\/m3u8/i.test(url) || /hls/i.test(url));
+}
+
 function extractEmbedUrl(data) {
   const player = data?.player || data?.data?.player || data?.data?.stream || {};
   return (
@@ -266,6 +270,15 @@ async function getStream(slug, episode, headers = {}) {
 
   if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
 
+  // If embedUrl is already a direct m3u8, use it directly
+  if (isDirectM3u8(embedUrl)) {
+    return {
+      m3u8: proxyUrl(embedUrl),
+      embedUrl,
+      m3u8Headers: headers,
+    };
+  }
+
   try {
     const m3u8Url = await extractM3u8FromEmbed(embedUrl, headers);
     if (m3u8Url) {
@@ -361,6 +374,11 @@ export async function getStreamByLinkId(linkId, headers = {}) {
   }
 
   if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
+
+  // If embedUrl is already a direct m3u8, use it directly
+  if (isDirectM3u8(embedUrl)) {
+    return { m3u8: proxyUrl(embedUrl), embedUrl, m3u8Headers: headers };
+  }
 
   try {
     const m3u8Url = await extractM3u8FromEmbed(embedUrl, headers);
