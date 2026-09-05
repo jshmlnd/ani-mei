@@ -31,6 +31,9 @@ export async function onRequest(context) {
         } else if (parsedTarget.hostname.includes('myvidplay')) {
           referer = referer || 'https://aniwaves.ru/';
           origin = origin || 'https://aniwaves.ru';
+        } else if (parsedTarget.hostname.includes('echovideo')) {
+          referer = referer || 'https://aniwaves.ru/';
+          origin = origin || 'https://aniwaves.ru';
         } else {
           referer = referer || `${parsedTarget.origin}/`;
           origin = origin || parsedTarget.origin;

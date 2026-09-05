@@ -25,6 +25,9 @@ export default async function handler(req, res) {
         } else if (parsedTarget.hostname.includes('myvidplay')) {
           referer = referer || 'https://aniwaves.ru/';
           origin = origin || 'https://aniwaves.ru';
+        } else if (parsedTarget.hostname.includes('echovideo')) {
+          referer = referer || 'https://aniwaves.ru/';
+          origin = origin || 'https://aniwaves.ru';
         } else {
           // Default: use the target origin as referer
           referer = referer || `${parsedTarget.origin}/`;
