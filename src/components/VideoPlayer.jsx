@@ -5,6 +5,49 @@ import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Vo
 const HLS_TIMEOUT_MS = 8000;
 const MAX_HLS_RETRIES = 2;
 
+const AD_SCRIPT_PATTERN = /googletagmanager|google-analytics|googlesyndication|doubleclick|adskeeper|propellerads|exoclick|adnxs|taboola|outbrain|popcash|popads|hilltopads|juicyads/i;
+
+function cleanEmbedHtml(html, embedUrl) {
+  const documentParser = new DOMParser();
+  const parsed = documentParser.parseFromString(html, 'text/html');
+  const base = parsed.createElement('base');
+  base.href = embedUrl;
+  parsed.head.prepend(base);
+
+  parsed.querySelectorAll('script[src]').forEach((script) => {
+    if (AD_SCRIPT_PATTERN.test(script.getAttribute('src') || '')) script.remove();
+  });
+
+  parsed.querySelectorAll('script:not([src])').forEach((script) => {
+    const content = script.textContent || '';
+    if (/googletag|adsbygoogle|window\.open|popup\s*\(|popunder|onclick/i.test(content)) {
+      script.remove();
+    }
+  });
+
+  const blocker = parsed.createElement('script');
+  blocker.textContent = `
+    (() => {
+      const originalOpen = window.open;
+      window.open = (...args) => {
+        const target = String(args[0] || '').toLowerCase();
+        if (/ad|pop|click|track/.test(target)) return null;
+        return originalOpen.apply(window, args);
+      };
+      const removeOverlays = () => {
+        document.querySelectorAll('[class*="ad"], [id*="ad"], [class*="popup"], [class*="popunder"], [class*="interstitial"]')
+          .forEach((element) => {
+            if (!element.closest('video') && !element.matches('video, source')) element.remove();
+          });
+      };
+      new MutationObserver(removeOverlays).observe(document.documentElement, { childList: true, subtree: true });
+      removeOverlays();
+    })();
+  `;
+  parsed.head.appendChild(blocker);
+  return `<!doctype html>${parsed.documentElement.outerHTML}`;
+}
+
 export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -28,6 +71,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [doubleTapSide, setDoubleTapSide] = useState(null);
   const [iframeClicked, setIframeClicked] = useState(false);
+  const [iframeSrcDoc, setIframeSrcDoc] = useState(null);
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
   const headersRef = useRef(headers);
@@ -58,6 +102,37 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
     return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
   }, []);
+
+  useEffect(() => {
+    if (!shouldUseIframe || blockEchoOnIOS) {
+      setIframeSrcDoc(null);
+      return undefined;
+    }
+
+    const embedUrl = useIframe ? (fallbackSrc || src) : src;
+    if (!embedUrl || embedUrl.startsWith('/api/')) {
+      setIframeSrcDoc(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setIframeSrcDoc(null);
+    fetch(`${getProxyUrl(embedUrl)}&raw=1`, { credentials: 'omit' })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Embed fetch failed: ${response.status}`);
+        return response.text();
+      })
+      .then((html) => {
+        if (!cancelled && /<html|<body|<iframe|<script/i.test(html)) {
+          setIframeSrcDoc(cleanEmbedHtml(html, embedUrl));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setIframeSrcDoc(null);
+      });
+
+    return () => { cancelled = true; };
+  }, [blockEchoOnIOS, fallbackSrc, getProxyUrl, shouldUseIframe, src, useIframe]);
 
   const switchToIframe = useCallback(() => {
     if (hlsRef.current) {
@@ -581,9 +656,9 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           </div>
         )}
         <iframe
-          src={iframeSrc}
+          src={iframeSrcDoc ? undefined : iframeSrc}
+          srcDoc={iframeSrcDoc || undefined}
           className="w-full aspect-video border-0"
-          sandbox="allow-scripts allow-same-origin allow-presentation"
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture"
           onLoad={() => setIsLoading(false)}
