@@ -13,6 +13,51 @@ function rawProxyUrl(targetUrl) {
   return proxyUrl(targetUrl, '&raw=1');
 }
 
+function extractEmbedUrl(data) {
+  const player = data?.player || data?.data?.player || data?.data?.stream || {};
+  return (
+    player.url ||
+    player.embedUrl ||
+    player.iframe?.match(/src=["']([^"']+)["']/i)?.[1] ||
+    data?.data?.url ||
+    data?.url ||
+    ''
+  );
+}
+
+function normalizeWatchData(payload, slug, episode) {
+  const data = payload?.data || payload || {};
+  const servers = data.servers || {};
+  const flat = data.flatServers || data.flat || [];
+  const player = data.player || null;
+  const playerServer = player?.server || player?.source || player;
+  const playerLinkId = playerServer?.linkId || playerServer?.id || null;
+  const playerUrl = extractEmbedUrl(data);
+
+  return {
+    servers,
+    flat: Array.isArray(flat) ? flat : [],
+    player,
+    playerUrl,
+    playerLinkId,
+    anime: data.anime || null,
+    episodes: data.episodes || [],
+    episodeCount: data.episodeCount || 0,
+    slug,
+    episode,
+  };
+}
+
+async function getWatchData(slug, episode) {
+  const episodePath = String(episode).startsWith('ep-') ? episode : `ep-${episode}`;
+  const api = `${STREAM_API}/watch/${encodeURIComponent(slug)}/${episodePath}`;
+  const { data } = await axios.get(rawProxyUrl(api), {
+    timeout: 20000,
+    responseType: 'json',
+  });
+  return normalizeWatchData(data, slug, episode);
+}
+
 async function extractM3u8FromEmbed(embedUrl) {
   const { data: html } = await axios.get(rawProxyUrl(embedUrl), {
     timeout: 10000,
@@ -124,22 +169,33 @@ export async function searchStream(keyword) {
 }
 
 async function getStream(slug, episode) {
-  // New API flow: GET /player/:slug/:episode -> { player: { url }, stream: { url } }
-  // then extract m3u8 from embedUrl via proxy
+  // New API flow: GET /watch/:slug/:episode -> unified player/server response.
   let embedUrl = '';
   try {
+    const watch = await getWatchData(slug, episode);
+    embedUrl = watch.playerUrl;
+    if (!embedUrl && watch.playerLinkId) {
+      const streamApi = `${STREAM_API}/stream/${encodeURIComponent(watch.playerLinkId)}`;
+      const { data: streamData } = await axios.get(rawProxyUrl(streamApi), {
+        timeout: 15000,
+        responseType: 'json',
+      });
+      embedUrl = extractEmbedUrl(streamData);
+    }
+  } catch (e) {
+    const status = e?.response?.status;
+    if (status !== 404) console.warn('[getStream] /watch failed for', slug, episode, e?.message);
+  }
+
+  // Legacy fallback: GET /player/:slug/:episode.
+  if (!embedUrl) try {
     const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
     const { data: playerData } = await axios.get(rawProxyUrl(api), {
       timeout: 20000,
       responseType: 'json',
     });
     if (playerData?.success && playerData?.data) {
-      embedUrl =
-        playerData.data.player?.url ||
-        playerData.data.stream?.url ||
-        playerData.data.url ||
-        playerData.data.player?.iframe?.match(/src="([^"]+)"/)?.[1] ||
-        '';
+      embedUrl = extractEmbedUrl(playerData.data);
       // If we got linkId but no url, try /stream/:linkId
       if (!embedUrl && playerData.data.linkId) {
         try {
@@ -226,7 +282,18 @@ async function getStream(slug, episode) {
 }
 
 export async function getServers(slug, episode) {
-  // Try /servers/:slug/:episode first — returns { servers: {sub, dub, raw, hsub...}, flat }
+  // New API: /watch/:slug/:episode returns servers and player data together.
+  try {
+    const watch = await getWatchData(slug, episode);
+    if (watch.flat.length || Object.keys(watch.servers).length || watch.playerUrl || watch.playerLinkId) {
+      return { ...watch, raw: watch, source: 'watch' };
+    }
+  } catch (e) {
+    const status = e?.response?.status;
+    if (status !== 404) console.warn('[getServers] /watch failed for', slug, episode, e?.message);
+  }
+
+  // Legacy fallback: /servers/:slug/:episode
   try {
     const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
     const { data: serversData } = await axios.get(rawProxyUrl(api), {
@@ -698,9 +765,24 @@ export async function getAnimeById(id) {
  */
 export async function getStreamAnimeDetails(slug) {
   if (!slug) return null;
-  const enc = encodeURIComponent(slug);
-  // Try /anime/:slug first, then /watch/:slug
-  const endpoints = [`/anime/${enc}`, `/watch/${enc}`];
+
+  // Resolve the provider slug via search first, since the API requires
+  // provider slugs like "one-piece-81553" rather than plain titles.
+  let providerSlug = slug;
+  try {
+    const results = await searchStream(slug);
+    if (results.length) {
+      const lower = slug.toLowerCase().trim();
+      const match = results.find((r) => (r.title || '').toLowerCase().includes(lower))
+        || results.find((r) => (r.id || '').includes(lower))
+        || results[0];
+      if (match.id) providerSlug = match.id;
+    }
+  } catch { /* continue with original slug */ }
+
+  const enc = encodeURIComponent(providerSlug);
+  // Try /watch/:providerSlug first (richest data), then /anime/:slug
+  const endpoints = [`/watch/${enc}`, `/anime/${enc}`];
   for (const ep of endpoints) {
     let data;
     try {
@@ -738,8 +820,8 @@ export async function getStreamAnimeDetails(slug) {
       const aired = a?.aired || raw?.aired || '';
       // Build AniList-compatible detail object
       return {
-        id: slug,
-        slug,
+        id: providerSlug,
+        slug: providerSlug,
         title: { english: title, romaji: jpTitle || title, native: jpTitle || title },
         coverImage: { large: poster, medium: poster },
         bannerImage: poster,
