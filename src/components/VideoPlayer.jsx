@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
-import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2 } from 'lucide-react';
+import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2, Subtitles, Gauge, PictureInPicture, PictureInPicture2 } from 'lucide-react';
 
 const HLS_TIMEOUT_MS = 8000;
 const MAX_HLS_RETRIES = 2;
@@ -21,12 +21,22 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const [quality, setQuality] = useState(-1);
   const [availableLevels, setAvailableLevels] = useState([]);
   const [useIframe, setUseIframe] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isPip, setIsPip] = useState(false);
+  const [subtitles, setSubtitles] = useState([]);
+  const [selectedSubtitle, setSelectedSubtitle] = useState(-1);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [doubleTapSide, setDoubleTapSide] = useState(null);
+  const [iframeClicked, setIframeClicked] = useState(false);
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
   const headersRef = useRef(headers);
   const hlsStartedRef = useRef(false);
   const hlsTimeoutRef = useRef(null);
   const hlsRetryRef = useRef(0);
+  const doubleTapTimerRef = useRef(null);
+  const doubleTapCountRef = useRef(0);
+  const lastTapTimeRef = useRef(0);
 
   useEffect(() => {
     headersRef.current = headers;
@@ -78,12 +88,21 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
     if (isM3u8 && Hls.isSupported()) {
       const hls = new Hls({
-        maxBufferLength: 10,
-        maxMaxBufferLength: 30,
+        maxBufferLength: 15,
+        maxMaxBufferLength: 60,
         startLevel: -1,
         startFragPrefetch: true,
         lowLatencyMode: false,
         backBufferLength: 0,
+        maxBufferLength: 10,
+        highBufferWatchdogPeriod: 1,
+        nudgeOffset: 0.1,
+        nudgeMaxRetry: 3,
+        enableWorker: true,
+        enableSoftwareAES: true,
+        handlePartialData: true,
+        subtitles: { enabled: true, default: false },
+        renditionReport: { playlistType: 'EVENT' },
       });
       hlsRef.current = hls;
 
@@ -114,9 +133,41 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           label: level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}kbps`,
         }));
         setAvailableLevels(levels);
+        // Parse subtitle tracks
+        if (data.subtitleTracks?.length) {
+          const subs = data.subtitleTracks.map((track, index) => ({
+            index,
+            lang: track.lang || 'und',
+            name: track.name || track.lang || `Track ${index + 1}`,
+            default: !!track.default,
+          }));
+          setSubtitles(subs);
+          // Auto-enable default subtitle track if present
+          const defaultIdx = subs.findIndex(s => s.default);
+          if (defaultIdx >= 0) {
+            setSelectedSubtitle(defaultIdx);
+            hls.subtitleTrack = defaultIdx;
+          }
+        }
         setIsLoading(false);
         hls.currentLevel = -1;
         video.play().catch(() => {});
+      });
+
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_, data) => {
+        if (data.subtitleTracks?.length) {
+          const subs = data.subtitleTracks.map((track, index) => ({
+            index,
+            lang: track.lang || 'und',
+            name: track.name || track.lang || `Track ${index + 1}`,
+            default: !!track.default,
+          }));
+          setSubtitles(subs);
+        }
+      });
+
+      hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (_, data) => {
+        setSelectedSubtitle(data.id);
       });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
@@ -330,6 +381,108 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
   }, []);
 
+  const changePlaybackRate = useCallback((rate) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = rate;
+    setPlaybackRate(rate);
+    setShowSpeedMenu(false);
+  }, []);
+
+  const cyclePlaybackRate = useCallback(() => {
+    const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const currentIdx = speeds.indexOf(playbackRate);
+    const nextIdx = (currentIdx + 1) % speeds.length;
+    changePlaybackRate(speeds[nextIdx]);
+  }, [playbackRate, changePlaybackRate]);
+
+  const toggleSubtitle = useCallback((index) => {
+    if (hlsRef.current) {
+      if (index === -1 || selectedSubtitle === index) {
+        hlsRef.current.subtitleTrack = -1;
+        setSelectedSubtitle(-1);
+      } else {
+        hlsRef.current.subtitleTrack = index;
+        hlsRef.current.subtitleDisplay = true;
+        setSelectedSubtitle(index);
+      }
+    } else {
+      const video = videoRef.current;
+      if (!video) return;
+      const textTracks = video.textTracks;
+      for (let i = 0; i < textTracks.length; i++) {
+        textTracks[i].mode = (i === index && selectedSubtitle !== index) ? 'showing' : 'hidden';
+      }
+      setSelectedSubtitle(selectedSubtitle === index ? -1 : index);
+    }
+  }, [selectedSubtitle]);
+
+  const togglePip = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (document.pictureInPictureEnabled) {
+        await video.requestPictureInPicture();
+      }
+    } catch (err) {
+      void err;
+    }
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || shouldUseIframe) return;
+    const onEnterPip = () => setIsPip(true);
+    const onLeavePip = () => setIsPip(false);
+    video.addEventListener('enterpictureinpicture', onEnterPip);
+    video.addEventListener('leavepictureinpicture', onLeavePip);
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnterPip);
+      video.removeEventListener('leavepictureinpicture', onLeavePip);
+    };
+  }, [shouldUseIframe]);
+
+  const handleVideoTouchEnd = useCallback((e) => {
+    if (shouldUseIframe) return;
+    const now = Date.now();
+    const timeSince = now - lastTapTimeRef.current;
+    const touch = e.changedTouches?.[0];
+    if (!touch) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+    const rect = video.getBoundingClientRect();
+    const relX = touch.clientX - rect.left;
+    const thirdWidth = rect.width / 3;
+    const side = relX < thirdWidth ? 'left' : relX > rect.width - thirdWidth ? 'right' : null;
+    if (!side) return; // middle third = normal tap → handled by onClick
+
+    doubleTapCountRef.current += 1;
+
+    if (timeSince < 350 && doubleTapCountRef.current >= 2) {
+      // Double-tap detected
+      doubleTapCountRef.current = 0;
+      if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+
+      if (side === 'left') {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      } else {
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + 10);
+      }
+      setDoubleTapSide(side);
+      setTimeout(() => setDoubleTapSide(null), 400);
+    } else {
+      // First tap — wait to see if second tap comes
+      lastTapTimeRef.current = now;
+      if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+      doubleTapTimerRef.current = setTimeout(() => {
+        doubleTapCountRef.current = 0;
+      }, 350);
+    }
+  }, [shouldUseIframe]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT') return;
@@ -339,11 +492,29 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         case 'm': e.preventDefault(); toggleMute(); break;
         case 'ArrowLeft': e.preventDefault(); skip(-10); break;
         case 'ArrowRight': e.preventDefault(); skip(10); break;
+        case '<': case ',': e.preventDefault(); cyclePlaybackRate(); break;
+        case '>': case '.': e.preventDefault(); cyclePlaybackRate(); break;
+        case 'p': e.preventDefault(); togglePip(); break;
+        case 'c': e.preventDefault(); if (subtitles.length) toggleSubtitle(subtitles.length ? 0 : -1); break;
+        case 'Escape': setShowSpeedMenu(false); break;
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleFullscreen, toggleMute, skip]);
+  }, [togglePlay, toggleFullscreen, toggleMute, skip, cyclePlaybackRate, togglePip, subtitles, toggleSubtitle]);
+
+  // Close speed menu on outside click
+  useEffect(() => {
+    if (!showSpeedMenu) return;
+    const close = () => setShowSpeedMenu(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showSpeedMenu]);
+
+  // Reset iframe click guard when source changes
+  useEffect(() => {
+    setIframeClicked(false);
+  }, [src, fallbackSrc]);
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
@@ -364,6 +535,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       }, 4000);
     }
   }, [isPlaying, showControls]);
+
+  const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -404,6 +577,24 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           allow="autoplay; fullscreen; picture-in-picture"
           onLoad={() => setIsLoading(false)}
         />
+        {/* Click-intercept overlay to block embed ad popups on first click */}
+        {!iframeClicked && (
+          <div
+            className="absolute inset-0 z-20 cursor-pointer"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIframeClicked(true);
+            }}
+          >
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+              <div className="bg-black/70 rounded-full px-6 py-3 flex items-center gap-3 border border-white/10 shadow-lg pointer-events-none">
+                <Play className="w-8 h-8 text-white" fill="currentColor" />
+                <span className="text-white font-semibold text-sm">Click to play</span>
+              </div>
+            </div>
+          </div>
+        )}
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <span className="loading loading-spinner loading-lg text-primary"></span>
@@ -426,6 +617,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         className="w-full aspect-video cursor-pointer"
         poster={poster}
         onClick={togglePlay}
+        onTouchEnd={handleVideoTouchEnd}
         playsInline
         webkit-playsinline="true"
         x-webkit-airplay="allow"
@@ -462,6 +654,15 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <Play className="w-10 h-10 text-white ml-1" fill="currentColor" />
           </div>
         </button>
+      )}
+
+      {doubleTapSide && (
+        <div className={`absolute inset-y-0 ${doubleTapSide === 'left' ? 'left-0 right-auto' : 'right-0 left-auto'} flex items-center justify-center pointer-events-none`}> 
+          <div className="bg-black/60 rounded-full px-4 py-2 flex items-center gap-2 animate-pulse">
+            {doubleTapSide === 'left' ? <SkipBack className="w-5 h-5 text-white" /> : <SkipForward className="w-5 h-5 text-white" />}
+            <span className="text-white text-sm font-bold">10s</span>
+          </div>
+        </div>
       )}
 
       <div
@@ -514,6 +715,45 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
               />
             </div>
 
+            {/* Subtitle control */}
+            {subtitles.length > 0 && (
+              <div className="relative">
+                <button
+                  className={`btn btn-ghost btn-xs ${selectedSubtitle >= 0 ? 'text-primary' : 'text-white hover:text-primary'}`}
+                  onClick={(e) => { e.stopPropagation(); toggleSubtitle(selectedSubtitle >= 0 ? -1 : 0); }}
+                  title="Toggle subtitles (C)"
+                >
+                  <Subtitles className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Speed control */}
+            <div className="relative">
+              <button
+                className="btn btn-ghost btn-xs text-white hover:text-primary gap-0.5"
+                onClick={(e) => { e.stopPropagation(); setShowSpeedMenu(v => !v); }}
+                title="Playback speed (< >)"
+              >
+                <Gauge className="w-4 h-4" />
+                {playbackRate !== 1 && <span className="text-[10px] font-bold ml-0.5">{playbackRate}x</span>}
+              </button>
+              {showSpeedMenu && (
+                <div className="absolute bottom-full right-0 mb-2 bg-base-200 rounded-box z-50 p-2 shadow-lg min-w-[80px]" onClick={(e) => e.stopPropagation()}>
+                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide px-2 pb-1">Speed</div>
+                  {speeds.map(s => (
+                    <button
+                      key={s}
+                      className={`block w-full text-left px-3 py-1.5 text-sm rounded-md transition-colors ${playbackRate === s ? 'bg-primary text-white font-bold' : 'text-[var(--text-secondary)] hover:bg-white/10'}`}
+                      onClick={() => changePlaybackRate(s)}
+                    >
+                      {s === 1 ? 'Normal' : `${s}x`}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {availableLevels.length > 1 && (
               <div className="dropdown dropdown-top">
                 <button tabIndex={0} className="btn btn-ghost btn-xs text-white hover:text-primary">
@@ -531,6 +771,15 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
                 </ul>
               </div>
             )}
+
+            {/* PiP toggle */}
+            <button
+              className="btn btn-ghost btn-xs text-white hover:text-primary p-2 min-h-0 h-auto"
+              onClick={togglePip}
+              title="Picture in Picture (P)"
+            >
+              {isPip ? <PictureInPicture2 className="w-4 h-4" /> : <PictureInPicture className="w-4 h-4" />}
+            </button>
 
             <button className="btn btn-ghost btn-xs text-white hover:text-primary p-2 min-h-0 h-auto" onClick={toggleFullscreen}>
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
