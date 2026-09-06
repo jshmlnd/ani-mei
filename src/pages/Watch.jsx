@@ -158,7 +158,7 @@ export default function Watch() {
         // This keeps old behavior for titles where /servers returns nothing
         if (!flatServers.length && Object.keys(servers).length === 0 && !serversLoading) {
           const title = anime.title?.english || anime.title?.romaji || '';
-          const data = await getStreamUrl(title, episode, streamHeadersRef.current);
+          const data = await getStreamUrl(title, episode);
           if (cancelled) return;
           if (data.iframe) {
             setIframeHtml(data.iframe);
@@ -188,7 +188,7 @@ export default function Watch() {
         // Try legacy as last resort before showing error
         try {
           const title = anime.title?.english || anime.title?.romaji || '';
-          const fallback = await getStreamUrl(title, episode, streamHeadersRef.current);
+          const fallback = await getStreamUrl(title, episode);
           if (fallback?.iframe) {
             setIframeHtml(fallback.iframe);
             setStreamUrl('');

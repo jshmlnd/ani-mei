@@ -3,20 +3,10 @@ import axios from 'axios';
 const ANILIST_API = import.meta.env.VITE_ANILIST_API || 'https://graphql.anilist.co';
 const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://animeiapi.joshuaklein-malonda.workers.dev';
 
-const PROXY_BASE = '/api/proxy';
-
 // Retry configuration
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
 const RETRY_STATUS_CODES = [408, 429, 500, 502, 503, 504];
-
-function proxyUrl(targetUrl, extra = '') {
-  return `${PROXY_BASE}?url=${encodeURIComponent(targetUrl)}${extra}`;
-}
-
-function rawProxyUrl(targetUrl, extraParams = '') {
-  return proxyUrl(targetUrl, `&raw=1${extraParams}`);
-}
 
 /**
  * Wrapper for axios requests with retry logic
@@ -41,7 +31,7 @@ async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
 async function getWatchData(slug, episode) {
   const episodePath = String(episode).startsWith('ep-') ? episode : `ep-${episode}`;
   const api = `${STREAM_API}/watch/${encodeURIComponent(slug)}/${episodePath}`;
-  const { data } = await fetchWithRetry(rawProxyUrl(api), {
+  const { data } = await fetchWithRetry(api, {
     timeout: 20000,
     responseType: 'json',
   });
@@ -71,7 +61,7 @@ export async function searchStream(keyword) {
   // New API: GET /search?q=keyword (AniMeiAPI – AnikotoTV)
   try {
     const api = `${STREAM_API}/search?q=${encodeURIComponent(keyword)}`;
-    const { data } = await fetchWithRetry(rawProxyUrl(api), {
+    const { data } = await fetchWithRetry(api, {
       timeout: 15000,
       responseType: 'json',
     });
@@ -92,7 +82,7 @@ export async function searchStream(keyword) {
   // Fallback to legacy endpoint for backwards-compat
   try {
     const api = `${STREAM_API}/api/v1/search?q=${encodeURIComponent(keyword)}`;
-    const { data } = await fetchWithRetry(rawProxyUrl(api), {
+    const { data } = await fetchWithRetry(api, {
       timeout: 15000,
       responseType: 'json',
     });
@@ -107,12 +97,12 @@ export async function searchStream(keyword) {
   }
 }
 
-async function getStream(slug, episode, headers = {}) {
+async function getStream(slug, episode) {
   // New API flow: GET /watch/:slug/:episode -> unified player/server response.
   try {
     const watch = await getWatchData(slug, episode);
     if (watch.playerLinkId) {
-      return getStreamByLinkId(watch.playerLinkId, headers);
+      return getStreamByLinkId(watch.playerLinkId);
     }
     if (watch.playerUrl) {
       // Fallback: try to get stream via linkId from playerUrl if possible
@@ -126,12 +116,12 @@ async function getStream(slug, episode, headers = {}) {
   // Legacy fallback: GET /player/:slug/:episode.
   try {
     const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
-    const { data: playerData } = await fetchWithRetry(rawProxyUrl(api), {
+    const { data: playerData } = await fetchWithRetry(api, {
       timeout: 20000,
       responseType: 'json',
     });
     if (playerData?.success && playerData?.data?.linkId) {
-      return getStreamByLinkId(playerData.data.linkId, headers);
+      return getStreamByLinkId(playerData.data.linkId);
     }
   } catch (e) {
     const status = e?.response?.status;
@@ -141,21 +131,21 @@ async function getStream(slug, episode, headers = {}) {
   // Fallback: try /servers/:slug/:episode -> /stream/:linkId
   try {
     const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
-    const { data: serversData } = await fetchWithRetry(rawProxyUrl(api), {
+    const { data: serversData } = await fetchWithRetry(api, {
       timeout: 15000,
       responseType: 'json',
     });
     const flat = serversData?.data?.flat || serversData?.data?.servers?.sub || [];
     const first = Array.isArray(flat) ? flat[0] : null;
     if (first?.linkId) {
-      return getStreamByLinkId(first.linkId, headers);
+      return getStreamByLinkId(first.linkId);
     }
   } catch (_e) { void _e; }
 
   // Legacy fallback: /api/v1/episode-stream
   try {
     const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
-    const { data: streamData } = await fetchWithRetry(rawProxyUrl(api), {
+    const { data: streamData } = await fetchWithRetry(api, {
       timeout: 20000,
       responseType: 'json',
     });
@@ -182,7 +172,7 @@ export async function getServers(slug, episode) {
   // Legacy fallback: /servers/:slug/:episode
   try {
     const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
-    const { data: serversData } = await fetchWithRetry(rawProxyUrl(api), {
+    const { data: serversData } = await fetchWithRetry(api, {
       timeout: 15000,
       responseType: 'json',
     });
@@ -203,7 +193,7 @@ export async function getServers(slug, episode) {
   // Fallback to /player/:slug/:episode — also exposes servers
   try {
     const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
-    const { data: playerData } = await fetchWithRetry(rawProxyUrl(api), {
+    const { data: playerData } = await fetchWithRetry(api, {
       timeout: 15000,
       responseType: 'json',
     });
@@ -227,7 +217,7 @@ export async function getStreamByLinkId(linkId) {
   if (!linkId) return { iframe: '', m3u8: '', url: '', skipData: null, sourceInfo: null };
   try {
     const streamApi = `${STREAM_API}/stream/${encodeURIComponent(linkId)}`;
-    const { data: sData } = await fetchWithRetry(rawProxyUrl(streamApi), {
+    const { data: sData } = await fetchWithRetry(streamApi, {
       timeout: 15000,
       responseType: 'json',
     });
@@ -476,27 +466,14 @@ async function fetchStreamList(endpoint, page = 1, perPage = 20) {
   const sep = endpoint.includes('?') ? '&' : '?';
   const url = `${STREAM_API}${endpoint}${sep}page=${page}`;
   try {
-    // Try direct fetch first (CORS-enabled worker), fallback to proxy for strict environments
-    let data;
-    try {
-      const res = await fetchWithRetry(url, { timeout: 15000, responseType: 'json' });
-      data = res.data;
-    } catch {
-      // Fallback via proxy
-      const res = await fetchWithRetry(rawProxyUrl(url), { timeout: 15000, responseType: 'json' });
-      data = res.data;
-    }
+    const { data } = await fetchWithRetry(url, { timeout: 15000, responseType: 'json' });
     if (!data?.success || !data?.data) throw new Error('No stream list data');
     const payload = data.data;
     const rawList = Array.isArray(payload.data) ? payload.data : [];
     const count = payload.count ?? rawList.length;
     const pagination = payload.pagination || {};
     const mediaAll = rawList.map(normalizeStreamAnime).filter(Boolean);
-    // Respect perPage for UI slicing while keeping server pagination truth
     const pageInfo = toPageInfo(pagination, count, perPage, rawList.length, page);
-    // If server page size differs from requested perPage, slice to requested size
-    // (server is typically 30, UI may want 12). For paginated endpoints we still
-    // return what server gave; slicing keeps grid predictable.
     const media = perPage && mediaAll.length > perPage ? mediaAll.slice(0, perPage) : mediaAll;
     return { media, pageInfo };
   } catch (e) {
@@ -506,24 +483,14 @@ async function fetchStreamList(endpoint, page = 1, perPage = 20) {
 }
 
 async function fetchStreamSearch(keyword, page = 1, perPage = 20) {
-  // AniKoto search is GET /search?q=...&page=... (backed by /filter?keyword=...)
   const url = `${STREAM_API}/search?q=${encodeURIComponent(keyword)}&page=${page}`;
   try {
-    let data;
-    try {
-      const res = await fetchWithRetry(url, { timeout: 15000, responseType: 'json' });
-      data = res.data;
-    } catch {
-      const res2 = await fetchWithRetry(rawProxyUrl(url), { timeout: 15000, responseType: 'json' });
-      data = res2.data;
-    }
+    const { data } = await fetchWithRetry(url, { timeout: 15000, responseType: 'json' });
     if (!data?.success || !data?.data) throw new Error('No search data');
     const payload = data.data;
     const rawList = Array.isArray(payload.data) ? payload.data : [];
     const count = payload.count ?? rawList.length;
     const pagination = payload.pagination || {};
-    // Server may return totalPages null when result set < page size; infer client paging.
-    // If pagination missing, do client-side slicing for consistent page param.
     if (!pagination?.totalPages && count > perPage) {
       const totalPages = Math.ceil(count / perPage);
       const start = (page - 1) * perPage;
@@ -601,12 +568,7 @@ export async function getStreamGenres() {
   try {
     const { data } = await fetchWithRetry(`${STREAM_API}/genres`, { timeout: 10000, responseType: 'json' });
     return data?.data?.genres || data?.data || [];
-  } catch {
-    try {
-      const { data } = await fetchWithRetry(rawProxyUrl(`${STREAM_API}/genres`), { timeout: 10000, responseType: 'json' });
-      return data?.data?.genres || data?.data || [];
-    } catch { return []; }
-  }
+  } catch { return []; }
 }
 
 // Detail: accept either numeric AniList ID or AniKoto slug
@@ -657,17 +619,9 @@ export async function getStreamAnimeDetails(slug) {
   // Try /watch/:providerSlug first (richest data), then /anime/:slug
   const endpoints = [`/watch/${enc}`, `/anime/${enc}`];
   for (const ep of endpoints) {
-    let data;
     try {
       const res = await fetchWithRetry(`${STREAM_API}${ep}`, { timeout: 15000, responseType: 'json' });
-      data = res.data;
-    } catch {
-      try {
-        const res2 = await fetchWithRetry(rawProxyUrl(`${STREAM_API}${ep}`), { timeout: 15000, responseType: 'json' });
-        data = res2.data;
-      } catch { continue; }
-    }
-    try {
+      const data = res.data;
       if (!data?.success) continue;
       // /anime returns { anime, episodes, related, info, poster } or { data: ...}
       // /watch returns { anime, episodes, related, servers ...}
@@ -757,7 +711,7 @@ export function getEpisodeCount(media) {
   return 24;
 }
 
-export async function getStreamUrl(animeTitle, episode, headers = {}) {
+export async function getStreamUrl(animeTitle, episode) {
   let lastError;
 
   // Search first – slugify('Attack on Titan') -> 'attack-on-titan' always 404 (needs suffix like -bgaoa)
@@ -779,7 +733,7 @@ export async function getStreamUrl(animeTitle, episode, headers = {}) {
       for (const cand of ranked.slice(0, 5)) {
         if (!cand.id) continue;
         try {
-          const r = await getStream(cand.id, episode, headers);
+          const r = await getStream(cand.id, episode);
           if (r?.iframe || r?.m3u8) return r;
           candidateError = new Error(`No stream for ${cand.title} (${cand.id})`);
           lastError = candidateError;
@@ -797,7 +751,7 @@ export async function getStreamUrl(animeTitle, episode, headers = {}) {
 
   // Fallback to direct slugified title (for already-correct slugs like "one-piece-155")
   try {
-    const direct = await getStream(slugify(animeTitle), episode, headers);
+    const direct = await getStream(slugify(animeTitle), episode);
     if (direct?.iframe || direct?.m3u8) return direct;
     if (!lastError) lastError = new Error(`No stream for slugified title ${slugify(animeTitle)}`);
   } catch (err) {
