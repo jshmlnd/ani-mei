@@ -12,6 +12,7 @@ export default function VideoPlayer({
   fallbackSrc, 
   iframeHtml, 
   skipData,
+  sourceInfo,
   onIframeError 
 }) {
   const videoRef = useRef(null);
@@ -73,6 +74,12 @@ export default function VideoPlayer({
   const isEchoEmbed = iframeHtml?.includes('echovideo') || iframeHtml?.includes('/embed-') || src?.includes('echovideo') || src?.includes('/embed-');
   const blockEchoOnIOS = isIOS && isEchoEmbed;
 
+  // Check if provider is known to block embedding (echovideo, etc.)
+  const providerDomain = sourceInfo?.domain || '';
+  const isProblematicProvider = ['echovideo', 'play.echovideo', 'myvidplay'].some(d => 
+    providerDomain.includes(d) || iframeHtml?.includes(d) || fallbackSrc?.includes(d)
+  );
+
   // Fallback from iframe to m3u8 when iframe fails (CSP, 403, etc.)
   const handleIframeError = useCallback(() => {
     if (fallbackSrc && !iframeFailed) {
@@ -80,6 +87,19 @@ export default function VideoPlayer({
       onIframeError?.();
     }
   }, [fallbackSrc, iframeFailed, onIframeError]);
+
+  // Iframe load timeout - fallback to m3u8 if iframe doesn't load in 10 seconds
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  useEffect(() => {
+    if (!hasIframeHtml || iframeFailed || iframeLoaded) return;
+    const timer = setTimeout(() => {
+      if (!iframeLoaded && !iframeFailed && fallbackSrc) {
+        setIframeFailed(true);
+        onIframeError?.();
+      }
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [hasIframeHtml, iframeFailed, iframeLoaded, fallbackSrc, onIframeError]);
 
   const getProxyUrl = useCallback((targetUrl) => {
     // Only proxy actual m3u8 segment URLs, NOT embed pages
@@ -570,8 +590,8 @@ export default function VideoPlayer({
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
 
-  // PRIMARY: Render iframe HTML directly from worker (preserves sandbox, referrerpolicy, allow attrs)
-  if (hasIframeHtml && !iframeFailed) {
+  // For problematic providers (echovideo, etc.), prefer m3u8 directly
+  if (hasIframeHtml && !iframeFailed && !isProblematicProvider) {
     if (blockEchoOnIOS) {
       return (
         <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
@@ -598,7 +618,10 @@ export default function VideoPlayer({
           allow={attrs.allow || "autoplay; fullscreen; picture-in-picture; encrypted-media"}
           referrerPolicy={attrs.referrerpolicy || "no-referrer"}
           sandbox={attrs.sandbox || "allow-scripts allow-same-origin allow-forms allow-presentation"}
-          onLoad={() => setIsLoading(false)}
+          onLoad={() => {
+            setIsLoading(false);
+            setIframeLoaded(true);
+          }}
           onError={handleIframeError}
         />
         {isLoading && (
