@@ -24,6 +24,7 @@ export default function Watch() {
   const [streamUrl, setStreamUrl] = useState('');
   const [streamFallback, setStreamFallback] = useState('');
   const [streamHeaders, setStreamHeaders] = useState({});
+  const [iframeHtml, setIframeHtml] = useState('');
   const streamHeadersRef = useRef(streamHeaders);
   const [streamLoading, setStreamLoading] = useState(false);
   const [streamError, setStreamError] = useState(null);
@@ -130,13 +131,26 @@ export default function Watch() {
         if (selectedServer?.linkId) {
           const data = await getStreamByLinkId(selectedServer.linkId, streamHeadersRef.current);
           if (cancelled) return;
-          if (data.m3u8 || data.embedUrl) {
-            setStreamUrl(data.m3u8 || '');
-            setStreamFallback(data.embedUrl || '');
+          
+          // PRIMARY: Worker iframe (preserves subtitles, qualities, sandbox)
+          if (data.iframe) {
+            setIframeHtml(data.iframe);
+            setStreamUrl('');       // No HLS source
+            setStreamFallback('');  // Not used for iframe mode
             setStreamHeaders(data.m3u8Headers || {});
             return;
           }
-          // server returned empty → fallback to legacy
+          
+          // SECONDARY: Direct m3u8 playback (if worker couldn't provide iframe)
+          if (data.m3u8) {
+            setIframeHtml('');      // Clear iframe
+            setStreamUrl(data.m3u8);
+            setStreamFallback(data.url || '');
+            setStreamHeaders(data.m3u8Headers || {});
+            return;
+          }
+          
+          // Server returned empty → fallback to legacy
           throw new Error('Server returned no stream');
         }
 
@@ -146,9 +160,20 @@ export default function Watch() {
           const title = anime.title?.english || anime.title?.romaji || '';
           const data = await getStreamUrl(title, episode, streamHeadersRef.current);
           if (cancelled) return;
-          setStreamUrl(data.m3u8 || '');
-          setStreamFallback(data.embedUrl || '');
-          setStreamHeaders(data.m3u8Headers || {});
+          if (data.iframe) {
+            setIframeHtml(data.iframe);
+            setStreamUrl('');
+            setStreamFallback('');
+            setStreamHeaders(data.m3u8Headers || {});
+            return;
+          }
+          if (data.m3u8) {
+            setIframeHtml('');
+            setStreamUrl(data.m3u8);
+            setStreamFallback(data.url || '');
+            setStreamHeaders(data.m3u8Headers || {});
+            return;
+          }
           // if legacy also empty, we show unavailable (handled by render)
           return;
         }
@@ -156,6 +181,7 @@ export default function Watch() {
         // Edge: servers exist but none selected yet
         setStreamUrl('');
         setStreamFallback('');
+        setIframeHtml('');
       } catch (_err) {
         void _err;
         if (cancelled) return;
@@ -163,9 +189,17 @@ export default function Watch() {
         try {
           const title = anime.title?.english || anime.title?.romaji || '';
           const fallback = await getStreamUrl(title, episode, streamHeadersRef.current);
+          if (fallback?.iframe) {
+            setIframeHtml(fallback.iframe);
+            setStreamUrl('');
+            setStreamFallback('');
+            setStreamHeaders(fallback.m3u8Headers || {});
+            return;
+          }
           if (fallback?.m3u8 || fallback?.embedUrl) {
+            setIframeHtml('');
             setStreamUrl(fallback.m3u8 || '');
-            setStreamFallback(fallback.embedUrl || '');
+            setStreamFallback(fallback.embedUrl || fallback.url || '');
             setStreamHeaders(fallback.m3u8Headers || {});
             return;
           }
@@ -228,7 +262,7 @@ export default function Watch() {
                   <p className="text-sm text-red-400/80 font-medium">{streamError}</p>
                 </div>
               </div>
-            ) : !streamUrl && !streamFallback ? (
+            ) : !streamUrl && !streamFallback && !iframeHtml ? (
               <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-xl flex items-center justify-center glow-shadow">
                 <div className="text-center px-4">
                   <CircleOff className="w-14 h-14 mx-auto text-red-400/50 mb-3" />
@@ -242,6 +276,7 @@ export default function Watch() {
                   src={streamUrl}
                   fallbackSrc={streamFallback}
                   headers={streamHeaders}
+                  iframeHtml={iframeHtml}
                   poster={anime.bannerImage || anime.coverImage?.large || anime.poster}
                   title={`${title} - Episode ${episode}`}
                 />

@@ -38,45 +38,6 @@ async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
   }
 }
 
-function isDirectM3u8(url) {
-  return url && (/\.m3u8($|\?)/i.test(url) || /\/m3u8/i.test(url) || /hls/i.test(url));
-}
-
-function extractEmbedUrl(data) {
-  const player = data?.player || data?.data?.player || data?.data?.stream || {};
-  return (
-    player.url ||
-    player.embedUrl ||
-    player.iframe?.match(/src=["']([^"']+)["']/i)?.[1] ||
-    data?.data?.url ||
-    data?.url ||
-    ''
-  );
-}
-
-function normalizeWatchData(payload, slug, episode) {
-  const data = payload?.data || payload || {};
-  const servers = data.servers || {};
-  const flat = data.flatServers || data.flat || [];
-  const player = data.player || null;
-  const playerServer = player?.server || player?.source || player;
-  const playerLinkId = playerServer?.linkId || playerServer?.id || null;
-  const playerUrl = extractEmbedUrl(data);
-
-  return {
-    servers,
-    flat: Array.isArray(flat) ? flat : [],
-    player,
-    playerUrl,
-    playerLinkId,
-    anime: data.anime || null,
-    episodes: data.episodes || [],
-    episodeCount: data.episodeCount || 0,
-    slug,
-    episode,
-  };
-}
-
 async function getWatchData(slug, episode) {
   const episodePath = String(episode).startsWith('ep-') ? episode : `ep-${episode}`;
   const api = `${STREAM_API}/watch/${encodeURIComponent(slug)}/${episodePath}`;
@@ -84,71 +45,19 @@ async function getWatchData(slug, episode) {
     timeout: 20000,
     responseType: 'json',
   });
-  return normalizeWatchData(data, slug, episode);
-}
-
-async function extractM3u8FromEmbed(embedUrl, headers = {}) {
-  const encodedHeaders = encodeURIComponent(JSON.stringify(headers));
-  const { data: html } = await fetchWithRetry(rawProxyUrl(embedUrl, `&h=${encodedHeaders}`), {
-    timeout: 10000,
-    responseType: 'text',
-    transformResponse: [(d) => d],
-  });
-
-  // Pattern 1: "sourceUrl": "https://..." (existing)
-  const sourceUrlMatch = html.match(/"sourceUrl"\s*:\s*"([^"]+)"/);
-  if (sourceUrlMatch) {
-    const sourceUrl = sourceUrlMatch[1].startsWith('http')
-      ? sourceUrlMatch[1]
-      : `${new URL(embedUrl).origin}${sourceUrlMatch[1]}`;
-    try {
-      const { data: sourceData } = await fetchWithRetry(rawProxyUrl(sourceUrl), {
-        timeout: 10000,
-        headers: { Accept: 'application/json' },
-      });
-      if (sourceData?.status === 'ok' && sourceData?.source) {
-        return sourceData.source;
-      }
-    } catch { /* continue to next pattern */ }
-  }
-
-  // Pattern 2: Direct m3u8 URL in source/src/file property
-  const directM3u8 = html.match(/(?:source|src|file|url)\s*[:=]\s*["']([^"']*\.m3u8[^"']*?)["']/i);
-  if (directM3u8) {
-    const m3u8Url = directM3u8[1].startsWith('http')
-      ? directM3u8[1]
-      : `${new URL(embedUrl).origin}${directM3u8[1]}`;
-    return m3u8Url;
-  }
-
-  // Pattern 3: HLS source in JSON config (e.g., sources: [{file: "..."}])
-  const jsonConfigMatch = html.match(/(?:sources|playlist)\s*[:=]\s*\[?\{[^}]*file\s*:\s*["']([^"']*\.m3u8[^"']*?)["']/i);
-  if (jsonConfigMatch) {
-    const m3u8Url = jsonConfigMatch[1].startsWith('http')
-      ? jsonConfigMatch[1]
-      : `${new URL(embedUrl).origin}${jsonConfigMatch[1]}`;
-    return m3u8Url;
-  }
-
-  // Pattern 4: data-src or data-url attributes with m3u8
-  const dataSrcMatch = html.match(/data-(?:src|url|video)\s*=\s*["']([^"']*\.m3u8[^"']*?)["']/i);
-  if (dataSrcMatch) {
-    const m3u8Url = dataSrcMatch[1].startsWith('http')
-      ? dataSrcMatch[1]
-      : `${new URL(embedUrl).origin}${dataSrcMatch[1]}`;
-    return m3u8Url;
-  }
-
-  // Pattern 5: HLS.js source assignment (e.g., hls.loadSource("..."))
-  const hlsSourceMatch = html.match(/(?:loadSource|src)\s*\(\s*["']([^"']*\.m3u8[^"']*?)["']/i);
-  if (hlsSourceMatch) {
-    const m3u8Url = hlsSourceMatch[1].startsWith('http')
-      ? hlsSourceMatch[1]
-      : `${new URL(embedUrl).origin}${hlsSourceMatch[1]}`;
-    return m3u8Url;
-  }
-
-  return null;
+  const d = data?.data || data || {};
+  return {
+    servers: d.servers || {},
+    flat: d.flatServers || d.flat || [],
+    player: d.player || null,
+    playerLinkId: d.player?.server?.linkId || d.player?.source?.linkId || d.player?.linkId || null,
+    playerUrl: d.player?.url || d.player?.embedUrl || d.player?.iframe?.match(/src=["']([^"']+)["']/i)?.[1] || d.url || '',
+    anime: d.anime || null,
+    episodes: d.episodes || [],
+    episodeCount: d.episodeCount || 0,
+    slug,
+    episode,
+  };
 }
 
 function slugify(title) {
@@ -200,17 +109,14 @@ export async function searchStream(keyword) {
 
 async function getStream(slug, episode, headers = {}) {
   // New API flow: GET /watch/:slug/:episode -> unified player/server response.
-  let embedUrl = '';
   try {
     const watch = await getWatchData(slug, episode);
-    embedUrl = watch.playerUrl;
-    if (!embedUrl && watch.playerLinkId) {
-      const streamApi = `${STREAM_API}/stream/${encodeURIComponent(watch.playerLinkId)}`;
-      const { data: streamData } = await fetchWithRetry(rawProxyUrl(streamApi), {
-        timeout: 15000,
-        responseType: 'json',
-      });
-      embedUrl = extractEmbedUrl(streamData);
+    if (watch.playerLinkId) {
+      return getStreamByLinkId(watch.playerLinkId, headers);
+    }
+    if (watch.playerUrl) {
+      // Fallback: try to get stream via linkId from playerUrl if possible
+      return { iframe: '', m3u8: '', url: watch.playerUrl, skipData: null, sourceInfo: null };
     }
   } catch (e) {
     const status = e?.response?.status;
@@ -218,40 +124,14 @@ async function getStream(slug, episode, headers = {}) {
   }
 
   // Legacy fallback: GET /player/:slug/:episode.
-  if (!embedUrl) try {
+  try {
     const api = `${STREAM_API}/player/${encodeURIComponent(slug)}/${episode}`;
     const { data: playerData } = await fetchWithRetry(rawProxyUrl(api), {
       timeout: 20000,
       responseType: 'json',
     });
-    if (playerData?.success && playerData?.data) {
-      embedUrl = extractEmbedUrl(playerData.data);
-      // If we got linkId but no url, try /stream/:linkId
-      if (!embedUrl && playerData.data.linkId) {
-        try {
-          const streamApi = `${STREAM_API}/stream/${encodeURIComponent(playerData.data.linkId)}`;
-          const { data: streamData } = await fetchWithRetry(rawProxyUrl(streamApi), {
-            timeout: 15000,
-            responseType: 'json',
-          });
-          embedUrl = streamData?.data?.url || streamData?.data?.raw?.url || '';
-        } catch (_e) { void _e; }
-      }
-      // Also try servers -> stream fallback if player url missing
-      if (!embedUrl) {
-        const flat = playerData.data.flatServers || playerData.data.servers?.sub || [];
-        const first = Array.isArray(flat) ? flat[0] : null;
-        if (first?.linkId) {
-          try {
-            const streamApi = `${STREAM_API}/stream/${encodeURIComponent(first.linkId)}`;
-            const { data: sData } = await fetchWithRetry(rawProxyUrl(streamApi), {
-              timeout: 15000,
-              responseType: 'json',
-            });
-            embedUrl = sData?.data?.url || sData?.data?.raw?.url || '';
-          } catch (_e) { void _e; }
-        }
-      }
+    if (playerData?.success && playerData?.data?.linkId) {
+      return getStreamByLinkId(playerData.data.linkId, headers);
     }
   } catch (e) {
     const status = e?.response?.status;
@@ -259,65 +139,32 @@ async function getStream(slug, episode, headers = {}) {
   }
 
   // Fallback: try /servers/:slug/:episode -> /stream/:linkId
-  if (!embedUrl) {
-    try {
-      const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
-      const { data: serversData } = await fetchWithRetry(rawProxyUrl(api), {
-        timeout: 15000,
-        responseType: 'json',
-      });
-      const flat = serversData?.data?.flat || serversData?.data?.servers?.sub || [];
-      const first = Array.isArray(flat) ? flat[0] : null;
-      if (first?.linkId) {
-        const streamApi = `${STREAM_API}/stream/${encodeURIComponent(first.linkId)}`;
-        const { data: sData } = await fetchWithRetry(rawProxyUrl(streamApi), {
-          timeout: 15000,
-          responseType: 'json',
-        });
-        embedUrl = sData?.data?.url || sData?.data?.raw?.url || '';
-      }
-    } catch (_e) { void _e; }
-  }
+  try {
+    const api = `${STREAM_API}/servers/${encodeURIComponent(slug)}/${episode}`;
+    const { data: serversData } = await fetchWithRetry(rawProxyUrl(api), {
+      timeout: 15000,
+      responseType: 'json',
+    });
+    const flat = serversData?.data?.flat || serversData?.data?.servers?.sub || [];
+    const first = Array.isArray(flat) ? flat[0] : null;
+    if (first?.linkId) {
+      return getStreamByLinkId(first.linkId, headers);
+    }
+  } catch (_e) { void _e; }
 
   // Legacy fallback: /api/v1/episode-stream
-  if (!embedUrl) {
-    try {
-      const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
-      const { data: streamData } = await fetchWithRetry(rawProxyUrl(api), {
-        timeout: 20000,
-        responseType: 'json',
-      });
-      if (streamData?.success && streamData?.data?.streaming_link) {
-        embedUrl = streamData.data.streaming_link;
-      }
-    } catch (_e) { void _e; }
-  }
-
-  if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
-
-  // If embedUrl is already a direct m3u8, use it directly
-  if (isDirectM3u8(embedUrl)) {
-    return {
-      m3u8: proxyUrl(embedUrl),
-      embedUrl,
-      m3u8Headers: headers,
-    };
-  }
-
   try {
-    const m3u8Url = await extractM3u8FromEmbed(embedUrl, headers);
-    if (m3u8Url) {
-      return {
-        m3u8: proxyUrl(m3u8Url),
-        embedUrl,
-        m3u8Headers: headers,
-      };
+    const api = `${STREAM_API}/api/v1/episode-stream?slug=${encodeURIComponent(slug)}&ep=${episode}`;
+    const { data: streamData } = await fetchWithRetry(rawProxyUrl(api), {
+      timeout: 20000,
+      responseType: 'json',
+    });
+    if (streamData?.success && streamData?.data?.streaming_link) {
+      return { iframe: '', m3u8: '', url: streamData.data.streaming_link, skipData: null, sourceInfo: null };
     }
-  } catch (e) {
-    console.error('[stream] extractM3u8FromEmbed failed:', e);
-  }
+  } catch (_e) { void _e; }
 
-  return { m3u8: '', embedUrl, m3u8Headers: headers };
+  return { iframe: '', m3u8: '', url: '', skipData: null, sourceInfo: null };
 }
 
 export async function getServers(slug, episode) {
@@ -376,44 +223,26 @@ export async function getServers(slug, episode) {
   return { servers: {}, flat: [], raw: null, source: 'none', slug, episode };
 }
 
-export async function getStreamByLinkId(linkId, headers = {}) {
-  if (!linkId) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
-  let embedUrl;
+export async function getStreamByLinkId(linkId) {
+  if (!linkId) return { iframe: '', m3u8: '', url: '', skipData: null, sourceInfo: null };
   try {
     const streamApi = `${STREAM_API}/stream/${encodeURIComponent(linkId)}`;
     const { data: sData } = await fetchWithRetry(rawProxyUrl(streamApi), {
       timeout: 15000,
       responseType: 'json',
     });
-    // stream endpoint returns { data: { url, iframe, raw: { url } } }
     const d = sData?.data || {};
-    embedUrl =
-      d.url ||
-      d.raw?.url ||
-      d.iframe?.match(/src="([^"]+)"/)?.[1] ||
-      '';
-    if (!embedUrl) embedUrl = sData?.url || '';
+    return {
+      iframe: d.iframe || '',
+      m3u8: d.m3u8 || '',
+      url: d.url || d.raw?.url || '',
+      skipData: d.skip_data || null,
+      sourceInfo: d.sourceInfo || null,
+    };
   } catch (e) {
     console.warn('[getStreamByLinkId] /stream failed for', linkId?.slice(0, 20), e?.message);
-    return { m3u8: '', embedUrl: '', m3u8Headers: {} };
+    return { iframe: '', m3u8: '', url: '', skipData: null, sourceInfo: null };
   }
-
-  if (!embedUrl) return { m3u8: '', embedUrl: '', m3u8Headers: {} };
-
-  // If embedUrl is already a direct m3u8, use it directly
-  if (isDirectM3u8(embedUrl)) {
-    return { m3u8: proxyUrl(embedUrl), embedUrl, m3u8Headers: headers };
-  }
-
-  try {
-    const m3u8Url = await extractM3u8FromEmbed(embedUrl, headers);
-    if (m3u8Url) {
-      return { m3u8: proxyUrl(m3u8Url), embedUrl, m3u8Headers: headers };
-    }
-  } catch (e) {
-    console.error('[getStreamByLinkId] extractM3u8FromEmbed failed:', e);
-  }
-  return { m3u8: '', embedUrl, m3u8Headers: headers };
 }
 
 export async function resolveSlug(animeTitle) {
@@ -951,7 +780,7 @@ export async function getStreamUrl(animeTitle, episode, headers = {}) {
         if (!cand.id) continue;
         try {
           const r = await getStream(cand.id, episode, headers);
-          if (r?.m3u8 || r?.embedUrl) return r;
+          if (r?.iframe || r?.m3u8) return r;
           candidateError = new Error(`No stream for ${cand.title} (${cand.id})`);
           lastError = candidateError;
         } catch (e) {
@@ -969,7 +798,7 @@ export async function getStreamUrl(animeTitle, episode, headers = {}) {
   // Fallback to direct slugified title (for already-correct slugs like "one-piece-155")
   try {
     const direct = await getStream(slugify(animeTitle), episode, headers);
-    if (direct?.m3u8 || direct?.embedUrl) return direct;
+    if (direct?.iframe || direct?.m3u8) return direct;
     if (!lastError) lastError = new Error(`No stream for slugified title ${slugify(animeTitle)}`);
   } catch (err) {
     lastError = err;

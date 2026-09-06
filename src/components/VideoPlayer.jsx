@@ -2,10 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2, Subtitles, Gauge, PictureInPicture, PictureInPicture2 } from 'lucide-react';
 
-const HLS_TIMEOUT_MS = 8000;
 const MAX_HLS_RETRIES = 2;
 
-export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc }) {
+export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc, iframeHtml }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -20,14 +19,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const [error, setError] = useState(null);
   const [quality, setQuality] = useState(-1);
   const [availableLevels, setAvailableLevels] = useState([]);
-  const [useIframe, setUseIframe] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isPip, setIsPip] = useState(false);
   const [subtitles, setSubtitles] = useState([]);
   const [selectedSubtitle, setSelectedSubtitle] = useState(-1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [doubleTapSide, setDoubleTapSide] = useState(null);
-  const [iframeClicked, setIframeClicked] = useState(false);
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
   const headersRef = useRef(headers);
@@ -42,42 +39,38 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     headersRef.current = headers;
   });
 
-  const isM3u8 = src && (src.includes('.m3u8') || src.includes('/m3u8') || src.includes('hls'));
-  const isEmbed = src && !isM3u8 && !useIframe && (src.includes('embed') || src.includes('echovideo'));
-  const shouldUseIframe = useIframe || isEmbed;
+  // Check if we have iframe HTML from worker (PRIMARY mode)
+  const hasIframeHtml = iframeHtml && iframeHtml.includes('<iframe');
+
+  // Detect if src is an actual m3u8 URL (not an embed page)
+  const isM3u8 = src && (src.includes('.m3u8') || src.includes('/m3u8') || src.includes('hls'))
+    && !src.includes('embed') && !src.includes('echovideo') && !src.includes('myvidplay');
 
   const isIOS = typeof navigator !== 'undefined'
     && (/iPad|iPhone|iPod/.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-  const isEchoEmbed = src?.includes('echovideo') || src?.includes('/embed-');
+  const isEchoEmbed = iframeHtml?.includes('echovideo') || iframeHtml?.includes('/embed-') || src?.includes('echovideo') || src?.includes('/embed-');
   const blockEchoOnIOS = isIOS && isEchoEmbed;
 
   const getProxyUrl = useCallback((targetUrl) => {
+    // Only proxy actual m3u8 segment URLs, NOT embed pages
+    const isM3u8Segment = targetUrl && (targetUrl.includes('.m3u8') || targetUrl.includes('/m3u8') || targetUrl.includes('hls'))
+      && !targetUrl.includes('embed') && !targetUrl.includes('echovideo') && !targetUrl.includes('myvidplay');
+    
+    if (!isM3u8Segment) return targetUrl; // Return raw URL for embed pages
+    
     const proxyBase = '/api/proxy';
     if (targetUrl.startsWith(proxyBase + '?')) return targetUrl;
     const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
     return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
   }, []);
 
-  const switchToIframe = useCallback(() => {
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    if (hlsTimeoutRef.current) {
-      clearTimeout(hlsTimeoutRef.current);
-      hlsTimeoutRef.current = null;
-    }
-    setUseIframe(true);
-  }, []);
-
   const initHls = useCallback(() => {
-    if (shouldUseIframe) return;
+    // If we have iframe HTML, don't initialize HLS
+    if (hasIframeHtml) return;
+    
     const video = videoRef.current;
     if (!video || !src) {
-      if (!src && fallbackSrc && !fallbackSrc.includes('.m3u8')) {
-        switchToIframe();
-      }
       return;
     }
 
@@ -108,14 +101,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       const proxiedUrl = getProxyUrl(src);
       hls.loadSource(proxiedUrl);
       hls.attachMedia(video);
-
-      if (fallbackSrc) {
-        hlsTimeoutRef.current = setTimeout(() => {
-          if (!hlsStartedRef.current) {
-            switchToIframe();
-          }
-        }, HLS_TIMEOUT_MS);
-      }
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
         hlsStartedRef.current = true;
@@ -175,19 +160,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
-          if (fallbackSrc && hlsRetryRef.current >= MAX_HLS_RETRIES) {
-            switchToIframe();
-            return;
-          }
-
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (data.details === 'manifestLoadError' || data.details === 'fragLoadError') {
                 if (hlsRetryRef.current < MAX_HLS_RETRIES) {
                   hlsRetryRef.current++;
                   hls.startLoad();
-                } else if (fallbackSrc) {
-                  switchToIframe();
                 } else {
                   setError('Stream blocked by CDN (403) — try a different server or episode');
                   hls.destroy();
@@ -195,8 +173,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
               } else if (hlsRetryRef.current < MAX_HLS_RETRIES) {
                 hlsRetryRef.current++;
                 hls.startLoad();
-              } else if (fallbackSrc) {
-                switchToIframe();
               } else {
                 setError(`Network error: ${data.details || 'connection failed'}`);
                 hls.destroy();
@@ -206,8 +182,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
               if (hlsRetryRef.current < MAX_HLS_RETRIES) {
                 hlsRetryRef.current++;
                 hls.recoverMediaError();
-              } else if (fallbackSrc) {
-                switchToIframe();
               } else {
                 setError('Video decode error — try a different quality or server');
                 hls.destroy();
@@ -222,20 +196,11 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = isM3u8 ? getProxyUrl(src) : src;
-      if (fallbackSrc && !hlsStartedRef.current) {
-        hlsTimeoutRef.current = setTimeout(() => {
-          if (!hlsStartedRef.current) {
-            switchToIframe();
-          }
-        }, HLS_TIMEOUT_MS);
-      }
-    } else if (fallbackSrc && !fallbackSrc.includes('.m3u8')) {
-      switchToIframe();
     } else {
       setError('Your browser does not support HLS video playback');
       setIsLoading(false);
     }
-  }, [src, shouldUseIframe, isM3u8, fallbackSrc, getProxyUrl, switchToIframe]);
+  }, [src, isM3u8, hasIframeHtml, getProxyUrl]);
 
   useEffect(() => {
     const t = setTimeout(initHls, 0);
@@ -254,7 +219,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || shouldUseIframe) return;
+    if (!video || hasIframeHtml) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -281,11 +246,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       const code = videoErr?.code;
       const message = videoErr?.message || 'unknown error';
       const detail = code ? ` (error code ${code}: ${message})` : '';
-      if (fallbackSrc) {
-        switchToIframe();
-      } else {
-        setError(`Video cannot be played${detail}`);
-      }
+      setError(`Video cannot be played${detail}`);
     };
 
     video.addEventListener('play', onPlay);
@@ -293,7 +254,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('durationchange', onDurationChange);
     video.addEventListener('waiting', onWaiting);
-    video.addEventListener('canplay', onCanPlay);
+    video.addEventEventListener('canplay', onCanPlay);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('error', onError);
 
@@ -307,7 +268,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('error', onError);
     };
-  }, [src, fallbackSrc, shouldUseIframe, switchToIframe]);
+  }, [src, fallbackSrc]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -442,7 +403,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || shouldUseIframe) return;
+    if (!video || hasIframeHtml) return;
     const onEnterPip = () => setIsPip(true);
     const onLeavePip = () => setIsPip(false);
     video.addEventListener('enterpictureinpicture', onEnterPip);
@@ -451,10 +412,10 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('enterpictureinpicture', onEnterPip);
       video.removeEventListener('leavepictureinpicture', onLeavePip);
     };
-  }, [shouldUseIframe]);
+  }, [hasIframeHtml]);
 
   const handleVideoTouchEnd = useCallback((e) => {
-    if (shouldUseIframe) return;
+    if (hasIframeHtml) return;
     const now = Date.now();
     const timeSince = now - lastTapTimeRef.current;
     const touch = e.changedTouches?.[0];
@@ -490,9 +451,10 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         doubleTapCountRef.current = 0;
       }, 350);
     }
-  }, [shouldUseIframe]);
+  }, [hasIframeHtml]);
 
   useEffect(() => {
+    if (hasIframeHtml) return;
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT') return;
       switch (e.key) {
@@ -554,7 +516,8 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
 
-  if (shouldUseIframe) {
+  // PRIMARY: Render iframe HTML directly from worker (preserves sandbox, referrerpolicy, allow attrs)
+  if (hasIframeHtml) {
     if (blockEchoOnIOS) {
       return (
         <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
@@ -566,7 +529,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         </div>
       );
     }
-    const iframeSrc = useIframe ? (fallbackSrc || src) : src;
     return (
       <div className="relative bg-black rounded-lg overflow-hidden" ref={containerRef}>
         {title && (
@@ -574,32 +536,11 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <h2 className="text-white text-lg font-semibold">{title}</h2>
           </div>
         )}
-        <iframe
-          src={iframeSrc}
-          className="w-full aspect-video border-0"
-          allowFullScreen
-          allow="autoplay; fullscreen; picture-in-picture"
+        <div
+          className="w-full aspect-video"
+          dangerouslySetInnerHTML={{ __html: iframeHtml }}
           onLoad={() => setIsLoading(false)}
         />
-        {/* Click-intercept overlay to block embed ad popups on first click */}
-        {!iframeClicked && (
-          <div
-            key={`${src}-${fallbackSrc}-click-guard`}
-            className="absolute inset-0 z-20 cursor-pointer"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIframeClicked(true);
-            }}
-          >
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
-              <div className="bg-black/70 rounded-full px-6 py-3 flex items-center gap-3 border border-white/10 shadow-lg pointer-events-none">
-                <Play className="w-8 h-8 text-white" fill="currentColor" />
-                <span className="text-white font-semibold text-sm">Click to play</span>
-              </div>
-            </div>
-          </div>
-        )}
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <span className="loading loading-spinner loading-lg text-primary"></span>
