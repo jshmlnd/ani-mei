@@ -138,9 +138,10 @@ export default function Watch() {
           if (cancelled) return;
           
           // PRIMARY: Worker iframe (preserves subtitles, qualities, sandbox)
+          // Also set m3u8 as HLS source for fallback when iframe fails
           if (data.iframe) {
             setIframeHtml(data.iframe);
-            setStreamUrl('');       // No HLS source
+            setStreamUrl(data.m3u8 || '');  // Use m3u8 for HLS fallback
             setStreamFallback(data.url || '');  // Embed URL as fallback
             setStreamHeaders(data.m3u8Headers || {});
             setSkipData(data.skipData || null);
@@ -171,7 +172,7 @@ export default function Watch() {
           if (cancelled) return;
           if (data.iframe) {
             setIframeHtml(data.iframe);
-            setStreamUrl('');
+            setStreamUrl(data.m3u8 || '');
             setStreamFallback(data.url || '');
             setStreamHeaders(data.m3u8Headers || {});
             setSkipData(data.skipData || null);
@@ -204,7 +205,7 @@ export default function Watch() {
           const fallback = await getStreamUrl(title, episode);
           if (fallback?.iframe) {
             setIframeHtml(fallback.iframe);
-            setStreamUrl('');
+            setStreamUrl(fallback.m3u8 || '');
             setStreamFallback(fallback.url || '');
             setStreamHeaders(fallback.m3u8Headers || {});
             setSkipData(fallback.skipData || null);
