@@ -134,15 +134,19 @@ export default function VideoPlayer({
     }
   }, [skipData]);
 
-  const initHls = useCallback(() => {
+const initHls = useCallback(() => {
     // If we have iframe HTML and it hasn't failed, don't initialize HLS
     if (hasIframeHtml && !iframeFailed) return;
     
     const video = videoRef.current;
     
-    // When iframe fails, use fallbackSrc as the HLS source
-    const hlsSrc = iframeFailed ? fallbackSrc : src;
+    // When iframe fails, prefer m3u8 URL (src) over fallbackSrc (embed URL)
+    const hlsSrc = iframeFailed ? (src || fallbackSrc) : src;
     if (!video || !hlsSrc) {
+      if (!hlsSrc) {
+        setError('No playable stream URL available');
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -154,6 +158,8 @@ export default function VideoPlayer({
     const isHlsSrc = hlsSrc && (hlsSrc.includes('.m3u8') || hlsSrc.includes('/m3u8') || hlsSrc.includes('hls'))
       && !hlsSrc.includes('embed') && !hlsSrc.includes('echovideo') && !hlsSrc.includes('myvidplay');
     
+    console.log('[VideoPlayer] initHls:', { hlsSrc, isHlsSrc, iframeFailed, hasIframeHtml });
+
     if (isHlsSrc && Hls.isSupported()) {
       const hls = new Hls({
         maxBufferLength: 15,
@@ -175,7 +181,14 @@ export default function VideoPlayer({
 
       const proxiedUrl = getProxyUrl(hlsSrc);
       hls.loadSource(proxiedUrl);
-      hls.attachMedia(video);
+      try {
+        hls.attachMedia(video);
+      } catch (err) {
+        console.error('[VideoPlayer] attachMedia failed:', err);
+        setError('Failed to attach stream — try a different server');
+        setIsLoading(false);
+        return;
+      }
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
         hlsStartedRef.current = true;
@@ -209,7 +222,13 @@ export default function VideoPlayer({
         }
         setIsLoading(false);
         hls.currentLevel = -1;
-        video.play().catch(() => {});
+        video.play().catch((err) => {
+          console.error('[VideoPlayer] play() failed:', err);
+          if (err.name === 'NotSupportedError') {
+            setError('Stream format not supported — try a different server');
+            setIsLoading(false);
+          }
+        });
       });
 
       hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_, data) => {
@@ -270,8 +289,22 @@ export default function VideoPlayer({
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = isHlsSrc ? getProxyUrl(hlsSrc) : hlsSrc;
+      video.play().catch((err) => {
+        console.error('[VideoPlayer] native play() failed:', err);
+        if (err.name === 'NotSupportedError') {
+          setError('Stream format not supported — try a different server');
+        }
+        setIsLoading(false);
+      });
     } else {
       setError('Your browser does not support HLS video playback');
+      setIsLoading(false);
+    }
+    
+    // If we have an hlsSrc but it's not a valid HLS source
+    if (!isHlsSrc && hlsSrc) {
+      console.warn('[VideoPlayer] Invalid HLS source:', hlsSrc);
+      setError('Invalid stream format — try a different server');
       setIsLoading(false);
     }
   }, [src, fallbackSrc, hasIframeHtml, iframeFailed, getProxyUrl]);
