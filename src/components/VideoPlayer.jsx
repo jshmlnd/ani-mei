@@ -4,7 +4,7 @@ import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Vo
 
 const MAX_HLS_RETRIES = 2;
 
-export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc, iframeHtml }) {
+export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc, iframeHtml, onIframeError }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -41,6 +41,22 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   // Check if we have iframe HTML from worker (PRIMARY mode)
   const hasIframeHtml = iframeHtml && iframeHtml.includes('<iframe');
+  const [iframeFailed, setIframeFailed] = useState(false);
+
+  // Parse iframe HTML to extract src and attributes
+  const parseIframeHtml = useCallback((html) => {
+    if (!html) return { src: '', attrs: {} };
+    const match = html.match(/<iframe\s+([^>]+)>/i);
+    if (!match) return { src: '', attrs: {} };
+    const attrStr = match[1];
+    const attrs = {};
+    const attrRegex = /(\w+)=["']([^"']*)["']/g;
+    let attrMatch;
+    while ((attrMatch = attrRegex.exec(attrStr)) !== null) {
+      attrs[attrMatch[1]] = attrMatch[2];
+    }
+    return { src: attrs.src || '', attrs };
+  }, []);
 
   // Detect if src is an actual m3u8 URL (not an embed page)
   const isM3u8 = src && (src.includes('.m3u8') || src.includes('/m3u8') || src.includes('hls'))
@@ -52,6 +68,14 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const isEchoEmbed = iframeHtml?.includes('echovideo') || iframeHtml?.includes('/embed-') || src?.includes('echovideo') || src?.includes('/embed-');
   const blockEchoOnIOS = isIOS && isEchoEmbed;
 
+  // Fallback from iframe to m3u8 when iframe fails (CSP, 403, etc.)
+  const handleIframeError = useCallback(() => {
+    if (fallbackSrc && !iframeFailed) {
+      setIframeFailed(true);
+      onIframeError?.();
+    }
+  }, [fallbackSrc, iframeFailed, onIframeError]);
+
   const getProxyUrl = useCallback((targetUrl) => {
     // Only proxy actual m3u8 segment URLs, NOT embed pages
     const isM3u8Segment = targetUrl && (targetUrl.includes('.m3u8') || targetUrl.includes('/m3u8') || targetUrl.includes('hls'))
@@ -59,18 +83,19 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     
     if (!isM3u8Segment) return targetUrl; // Return raw URL for embed pages
     
-    const proxyBase = '/api/proxy';
-    if (targetUrl.startsWith(proxyBase + '?')) return targetUrl;
-    const encodedHeaders = encodeURIComponent(JSON.stringify(headersRef.current));
-    return `${proxyBase}?url=${encodeURIComponent(targetUrl)}&h=${encodedHeaders}`;
+    // No proxy available - use direct URL (segments may fail if CDN blocks browser IPs)
+    return targetUrl;
   }, []);
 
   const initHls = useCallback(() => {
-    // If we have iframe HTML, don't initialize HLS
-    if (hasIframeHtml) return;
+    // If we have iframe HTML and it hasn't failed, don't initialize HLS
+    if (hasIframeHtml && !iframeFailed) return;
     
     const video = videoRef.current;
-    if (!video || !src) {
+    
+    // When iframe fails, use fallbackSrc as the HLS source
+    const hlsSrc = iframeFailed ? fallbackSrc : src;
+    if (!video || !hlsSrc) {
       return;
     }
 
@@ -79,7 +104,10 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     }
     hlsStartedRef.current = false;
 
-    if (isM3u8 && Hls.isSupported()) {
+    const isHlsSrc = hlsSrc && (hlsSrc.includes('.m3u8') || hlsSrc.includes('/m3u8') || hlsSrc.includes('hls'))
+      && !hlsSrc.includes('embed') && !hlsSrc.includes('echovideo') && !hlsSrc.includes('myvidplay');
+    
+    if (isHlsSrc && Hls.isSupported()) {
       const hls = new Hls({
         maxBufferLength: 15,
         maxMaxBufferLength: 60,
@@ -98,7 +126,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       });
       hlsRef.current = hls;
 
-      const proxiedUrl = getProxyUrl(src);
+      const proxiedUrl = getProxyUrl(hlsSrc);
       hls.loadSource(proxiedUrl);
       hls.attachMedia(video);
 
@@ -195,12 +223,12 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = isM3u8 ? getProxyUrl(src) : src;
+      video.src = isHlsSrc ? getProxyUrl(hlsSrc) : hlsSrc;
     } else {
       setError('Your browser does not support HLS video playback');
       setIsLoading(false);
     }
-  }, [src, isM3u8, hasIframeHtml, getProxyUrl]);
+  }, [src, fallbackSrc, isM3u8, hasIframeHtml, iframeFailed, getProxyUrl]);
 
   useEffect(() => {
     const t = setTimeout(initHls, 0);
@@ -219,7 +247,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || hasIframeHtml) return;
+    if (!video || hasIframeHtml || iframeFailed) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -403,7 +431,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || hasIframeHtml) return;
+    if (!video || hasIframeHtml || iframeFailed) return;
     const onEnterPip = () => setIsPip(true);
     const onLeavePip = () => setIsPip(false);
     video.addEventListener('enterpictureinpicture', onEnterPip);
@@ -412,10 +440,10 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('enterpictureinpicture', onEnterPip);
       video.removeEventListener('leavepictureinpicture', onLeavePip);
     };
-  }, [hasIframeHtml]);
+  }, [hasIframeHtml, iframeFailed]);
 
   const handleVideoTouchEnd = useCallback((e) => {
-    if (hasIframeHtml) return;
+    if (hasIframeHtml || iframeFailed) return;
     const now = Date.now();
     const timeSince = now - lastTapTimeRef.current;
     const touch = e.changedTouches?.[0];
@@ -451,10 +479,10 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         doubleTapCountRef.current = 0;
       }, 350);
     }
-  }, [hasIframeHtml]);
+  }, [hasIframeHtml, iframeFailed]);
 
   useEffect(() => {
-    if (hasIframeHtml) return;
+    if (hasIframeHtml || iframeFailed) return;
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT') return;
       switch (e.key) {
@@ -472,7 +500,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleFullscreen, toggleMute, skip, cyclePlaybackRate, togglePip, subtitles, toggleSubtitle]);
+  }, [togglePlay, toggleFullscreen, toggleMute, skip, cyclePlaybackRate, togglePip, subtitles, toggleSubtitle, hasIframeHtml, iframeFailed]);
 
   // Close speed menu on outside click
   useEffect(() => {
@@ -517,7 +545,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
 
   // PRIMARY: Render iframe HTML directly from worker (preserves sandbox, referrerpolicy, allow attrs)
-  if (hasIframeHtml) {
+  if (hasIframeHtml && !iframeFailed) {
     if (blockEchoOnIOS) {
       return (
         <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
@@ -529,6 +557,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
         </div>
       );
     }
+    const { src: iframeSrc, attrs } = parseIframeHtml(iframeHtml);
     return (
       <div className="relative bg-black rounded-lg overflow-hidden" ref={containerRef}>
         {title && (
@@ -536,10 +565,15 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             <h2 className="text-white text-lg font-semibold">{title}</h2>
           </div>
         )}
-        <div
-          className="w-full aspect-video"
-          dangerouslySetInnerHTML={{ __html: iframeHtml }}
+        <iframe
+          src={iframeSrc}
+          className="w-full aspect-video border-0"
+          allowFullScreen={attrs.allowfullscreen || true}
+          allow={attrs.allow || "autoplay; fullscreen; picture-in-picture; encrypted-media"}
+          referrerPolicy={attrs.referrerpolicy || "no-referrer"}
+          sandbox={attrs.sandbox || "allow-scripts allow-same-origin allow-forms allow-presentation"}
           onLoad={() => setIsLoading(false)}
+          onError={handleIframeError}
         />
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">

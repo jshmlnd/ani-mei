@@ -277,6 +277,10 @@ export default function Watch() {
                   fallbackSrc={streamFallback}
                   headers={streamHeaders}
                   iframeHtml={iframeHtml}
+                  onIframeError={() => {
+                    setIframeHtml('');
+                    if (streamFallback) setStreamUrl(streamFallback);
+                  }}
                   poster={anime.bannerImage || anime.coverImage?.large || anime.poster}
                   title={`${title} - Episode ${episode}`}
                 />
