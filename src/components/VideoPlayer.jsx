@@ -140,13 +140,13 @@ const initHls = useCallback(() => {
     
     const video = videoRef.current;
     
-    // When iframe fails, prefer m3u8 URL (src) over fallbackSrc (embed URL)
-    const hlsSrc = iframeFailed ? (src || fallbackSrc) : src;
-    if (!video || !hlsSrc) {
-      if (!hlsSrc) {
-        setError('No playable stream URL available');
-        setIsLoading(false);
-      }
+    // When iframe fails, ONLY use m3u8 URL (src) - never fallbackSrc (embed URL)
+    const hlsSrc = iframeFailed ? src : src;
+    if (!video) return;
+    
+    if (!hlsSrc) {
+      setError('No HLS stream available for this server — try a different server');
+      setIsLoading(false);
       return;
     }
 
@@ -160,7 +160,13 @@ const initHls = useCallback(() => {
     
     console.log('[VideoPlayer] initHls:', { hlsSrc, isHlsSrc, iframeFailed, hasIframeHtml });
 
-    if (isHlsSrc && Hls.isSupported()) {
+    if (!isHlsSrc) {
+      setError('Stream format not supported on this server — try a different server');
+      setIsLoading(false);
+      return;
+    }
+
+    if (Hls.isSupported()) {
       const hls = new Hls({
         maxBufferLength: 15,
         maxMaxBufferLength: 60,
@@ -287,27 +293,11 @@ const initHls = useCallback(() => {
           }
         }
       });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = isHlsSrc ? getProxyUrl(hlsSrc) : hlsSrc;
-      video.play().catch((err) => {
-        console.error('[VideoPlayer] native play() failed:', err);
-        if (err.name === 'NotSupportedError') {
-          setError('Stream format not supported — try a different server');
-        }
-        setIsLoading(false);
-      });
     } else {
       setError('Your browser does not support HLS video playback');
       setIsLoading(false);
     }
-    
-    // If we have an hlsSrc but it's not a valid HLS source
-    if (!isHlsSrc && hlsSrc) {
-      console.warn('[VideoPlayer] Invalid HLS source:', hlsSrc);
-      setError('Invalid stream format — try a different server');
-      setIsLoading(false);
-    }
-  }, [src, fallbackSrc, hasIframeHtml, iframeFailed, getProxyUrl]);
+  }, [src, hasIframeHtml, iframeFailed, getProxyUrl]);
 
   useEffect(() => {
     const t = setTimeout(initHls, 0);
