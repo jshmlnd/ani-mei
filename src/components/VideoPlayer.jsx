@@ -4,7 +4,16 @@ import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Vo
 
 const MAX_HLS_RETRIES = 2;
 
-export default function VideoPlayer({ src, headers = {}, poster, title, fallbackSrc, iframeHtml, onIframeError }) {
+export default function VideoPlayer({ 
+  src, 
+  headers = {}, 
+  poster, 
+  title, 
+  fallbackSrc, 
+  iframeHtml, 
+  skipData,
+  onIframeError 
+}) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,7 +46,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
 
   useEffect(() => {
     headersRef.current = headers;
-  });
+  }, [headers]);
 
   // Check if we have iframe HTML from worker (PRIMARY mode)
   const hasIframeHtml = iframeHtml && iframeHtml.includes('<iframe');
@@ -57,10 +66,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     }
     return { src: attrs.src || '', attrs };
   }, []);
-
-  // Detect if src is an actual m3u8 URL (not an embed page)
-  const isM3u8 = src && (src.includes('.m3u8') || src.includes('/m3u8') || src.includes('hls'))
-    && !src.includes('embed') && !src.includes('echovideo') && !src.includes('myvidplay');
 
   const isIOS = typeof navigator !== 'undefined'
     && (/iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -86,6 +91,28 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     // No proxy available - use direct URL (segments may fail if CDN blocks browser IPs)
     return targetUrl;
   }, []);
+
+  // Apply skipData (subtitles/quality) from API if available
+  const skipDataAppliedRef = useRef(false);
+  
+  useEffect(() => {
+    if (skipDataAppliedRef.current) return;
+    if (skipData?.subtitles?.length) {
+      const subs = skipData.subtitles.map((track, index) => ({
+        index,
+        lang: track.lang || 'und',
+        name: track.name || track.lang || `Track ${index + 1}`,
+        default: !!track.default,
+      }));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSubtitles(subs);
+      const defaultIdx = subs.findIndex(s => s.default);
+      if (defaultIdx >= 0) {
+        setSelectedSubtitle(defaultIdx);
+      }
+      skipDataAppliedRef.current = true;
+    }
+  }, [skipData]);
 
   const initHls = useCallback(() => {
     // If we have iframe HTML and it hasn't failed, don't initialize HLS
@@ -145,7 +172,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
           label: level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}kbps`,
         }));
         setAvailableLevels(levels);
-        // Parse subtitle tracks
+        // Parse subtitle tracks from manifest
         if (data.subtitleTracks?.length) {
           const subs = data.subtitleTracks.map((track, index) => ({
             index,
@@ -154,7 +181,6 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
             default: !!track.default,
           }));
           setSubtitles(subs);
-          // Auto-enable default subtitle track if present
           const defaultIdx = subs.findIndex(s => s.default);
           if (defaultIdx >= 0) {
             setSelectedSubtitle(defaultIdx);
@@ -228,7 +254,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       setError('Your browser does not support HLS video playback');
       setIsLoading(false);
     }
-  }, [src, fallbackSrc, isM3u8, hasIframeHtml, iframeFailed, getProxyUrl]);
+  }, [src, fallbackSrc, hasIframeHtml, iframeFailed, getProxyUrl]);
 
   useEffect(() => {
     const t = setTimeout(initHls, 0);
@@ -282,7 +308,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('durationchange', onDurationChange);
     video.addEventListener('waiting', onWaiting);
-    video.addEventEventListener('canplay', onCanPlay);
+    video.addEventListener('canplay', onCanPlay);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('error', onError);
 
@@ -296,7 +322,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('error', onError);
     };
-  }, [src, fallbackSrc]);
+  }, [src, fallbackSrc, hasIframeHtml, iframeFailed]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -642,7 +668,7 @@ export default function VideoPlayer({ src, headers = {}, poster, title, fallback
       )}
 
       {doubleTapSide && (
-        <div className={`absolute inset-y-0 ${doubleTapSide === 'left' ? 'left-0 right-auto' : 'right-0 left-auto'} flex items-center justify-center pointer-events-none`}> 
+        <div className={`absolute inset-y-0 ${doubleTapSide === 'left' ? 'left-0 right-auto' : 'right-0 left-auto'} flex items-center justify-center pointer-events-none`}>
           <div className="bg-black/60 rounded-full px-4 py-2 flex items-center gap-2 animate-pulse">
             {doubleTapSide === 'left' ? <SkipBack className="w-5 h-5 text-white" /> : <SkipForward className="w-5 h-5 text-white" />}
             <span className="text-white text-sm font-bold">10s</span>

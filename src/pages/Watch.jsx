@@ -25,6 +25,8 @@ export default function Watch() {
   const [streamFallback, setStreamFallback] = useState('');
   const [streamHeaders, setStreamHeaders] = useState({});
   const [iframeHtml, setIframeHtml] = useState('');
+  const [skipData, setSkipData] = useState(null);
+  const [sourceInfo, setSourceInfo] = useState(null);
   const streamHeadersRef = useRef(streamHeaders);
   const [streamLoading, setStreamLoading] = useState(false);
   const [streamError, setStreamError] = useState(null);
@@ -71,6 +73,9 @@ export default function Watch() {
       setStreamUrl('');
       setStreamFallback('');
       setStreamHeaders({});
+      setIframeHtml('');
+      setSkipData(null);
+      setSourceInfo(null);
       setStreamError(null);
       try {
         const directSlug = anime.slug || (typeof anime.id === 'string' && anime.id.includes('-') ? anime.id : null) || (typeof id === 'string' && id.includes('-') ? id : null);
@@ -136,8 +141,10 @@ export default function Watch() {
           if (data.iframe) {
             setIframeHtml(data.iframe);
             setStreamUrl('');       // No HLS source
-            setStreamFallback('');  // Not used for iframe mode
+            setStreamFallback(data.url || '');  // Embed URL as fallback
             setStreamHeaders(data.m3u8Headers || {});
+            setSkipData(data.skipData || null);
+            setSourceInfo(data.sourceInfo || null);
             return;
           }
           
@@ -147,6 +154,8 @@ export default function Watch() {
             setStreamUrl(data.m3u8);
             setStreamFallback(data.url || '');
             setStreamHeaders(data.m3u8Headers || {});
+            setSkipData(data.skipData || null);
+            setSourceInfo(data.sourceInfo || null);
             return;
           }
           
@@ -163,8 +172,10 @@ export default function Watch() {
           if (data.iframe) {
             setIframeHtml(data.iframe);
             setStreamUrl('');
-            setStreamFallback('');
+            setStreamFallback(data.url || '');
             setStreamHeaders(data.m3u8Headers || {});
+            setSkipData(data.skipData || null);
+            setSourceInfo(data.sourceInfo || null);
             return;
           }
           if (data.m3u8) {
@@ -172,6 +183,8 @@ export default function Watch() {
             setStreamUrl(data.m3u8);
             setStreamFallback(data.url || '');
             setStreamHeaders(data.m3u8Headers || {});
+            setSkipData(data.skipData || null);
+            setSourceInfo(data.sourceInfo || null);
             return;
           }
           // if legacy also empty, we show unavailable (handled by render)
@@ -192,8 +205,10 @@ export default function Watch() {
           if (fallback?.iframe) {
             setIframeHtml(fallback.iframe);
             setStreamUrl('');
-            setStreamFallback('');
+            setStreamFallback(fallback.url || '');
             setStreamHeaders(fallback.m3u8Headers || {});
+            setSkipData(fallback.skipData || null);
+            setSourceInfo(fallback.sourceInfo || null);
             return;
           }
           if (fallback?.m3u8 || fallback?.embedUrl) {
@@ -201,6 +216,8 @@ export default function Watch() {
             setStreamUrl(fallback.m3u8 || '');
             setStreamFallback(fallback.embedUrl || fallback.url || '');
             setStreamHeaders(fallback.m3u8Headers || {});
+            setSkipData(fallback.skipData || null);
+            setSourceInfo(fallback.sourceInfo || null);
             return;
           }
         } catch (_e) { void _e; }
@@ -277,6 +294,8 @@ export default function Watch() {
                   fallbackSrc={streamFallback}
                   headers={streamHeaders}
                   iframeHtml={iframeHtml}
+                  skipData={skipData}
+                  sourceInfo={sourceInfo}
                   onIframeError={() => {
                     setIframeHtml('');
                     if (streamFallback) setStreamUrl(streamFallback);
