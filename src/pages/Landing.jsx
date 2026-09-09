@@ -251,7 +251,7 @@ export default function Landing() {
       <div className="relative z-10 px-6 pb-6">
         <p className="text-[var(--text-muted)] text-[11px] text-center flex items-center justify-center gap-1.5">
           <Heart size="12" className="text-[var(--accent)] animate-heart-beat" fill="currentColor" />
-          Built with love for jimei! 🩷
+          Built with love for jimei!
         </p>
       </div>
     </div>
