@@ -87,6 +87,20 @@ export default function VideoPlayer({
   const doubleTapTimerRef = useRef(null);
   const doubleTapCountRef = useRef(0);
   const lastTapTimeRef = useRef(0);
+  // Timestamp of the last touch on the video area — used to suppress the
+  // synthetic mouse `click` that mobile browsers fire after touchend, so a
+  // tap toggles controls instead of also toggling playback.
+  const lastVideoTouchRef = useRef(0);
+  const isPlayingRef = useRef(false);
+  const showControlsRef = useRef(true);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    showControlsRef.current = showControls;
+  }, [showControls]);
 
   useEffect(() => {
     headersRef.current = headers;
@@ -834,10 +848,57 @@ const initHls = useCallback(() => {
     };
   }, [showControls, selectedSubtitle, subtitles, extSubtitles.length, hasIframeHtml, iframeFailed]);
 
+  // Single source of truth for auto-hiding: (re)starts the 3s timer that
+  // hides the controls while playing. Works on both desktop (no mousemove)
+  // and mobile (no touch), e.g. right after entering fullscreen + play.
+  const scheduleAutoHide = useCallback(() => {
+    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+    hideControlsTimer.current = null;
+    if (!isPlayingRef.current) return;
+    hideControlsTimer.current = setTimeout(() => {
+      if (isPlayingRef.current) setShowControls(false);
+    }, 3000);
+  }, []);
+
+  // While paused the controls always stay visible; while playing (or when
+  // entering/leaving fullscreen mid-playback) (re)arm the auto-hide timer
+  // so controls can never get stuck on screen on mobile.
+  useEffect(() => {
+    if (!isPlaying) {
+      if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+      hideControlsTimer.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowControls(true);
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowControls(true);
+      scheduleAutoHide();
+    }
+  }, [isPlaying, isFullscreen, scheduleAutoHide]);
+
+  useEffect(() => () => {
+    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+    if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+  }, []);
+
+  const toggleControls = useCallback(() => {
+    if (showControlsRef.current) {
+      if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+      doubleTapTimerRef.current = null;
+      doubleTapCountRef.current = 0;
+      if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+      hideControlsTimer.current = null;
+      setShowControls(false);
+    } else {
+      setShowControls(true);
+      scheduleAutoHide();
+    }
+  }, [scheduleAutoHide]);
+
   const handleVideoTouchEnd = useCallback((e) => {
     if (hasIframeHtml || iframeFailed) return;
-    const now = Date.now();
-    const timeSince = now - lastTapTimeRef.current;
+    // Don't let this touch also toggle playback via the synthetic click.
+    lastVideoTouchRef.current = Date.now();
     const touch = e.changedTouches?.[0];
     if (!touch) return;
 
@@ -846,15 +907,25 @@ const initHls = useCallback(() => {
     const rect = video.getBoundingClientRect();
     const relX = touch.clientX - rect.left;
     const thirdWidth = rect.width / 3;
-    const side = relX < thirdWidth ? 'left' : relX > rect.width - thirdWidth ? 'right' : null;
-    if (!side) return; // middle third = normal tap → handled by onClick
+    const side = relX < thirdWidth ? 'left' : relX > rect.width - thirdWidth ? 'right' : 'middle';
 
+    if (side === 'middle') {
+      // Single tap in the middle toggles the controls (never playback).
+      toggleControls();
+      return;
+    }
+
+    // Left/right thirds: single tap toggles controls (deferred so a second
+    // tap can still become a double-tap seek), double tap seeks ±10s.
+    const now = Date.now();
+    const timeSince = now - lastTapTimeRef.current;
     doubleTapCountRef.current += 1;
 
     if (timeSince < 350 && doubleTapCountRef.current >= 2) {
-      // Double-tap detected
+      // Double-tap detected — cancel the pending single-tap toggle.
       doubleTapCountRef.current = 0;
       if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
+      doubleTapTimerRef.current = null;
 
       if (side === 'left') {
         video.currentTime = Math.max(0, video.currentTime - 10);
@@ -863,15 +934,38 @@ const initHls = useCallback(() => {
       }
       setDoubleTapSide(side);
       setTimeout(() => setDoubleTapSide(null), 400);
+      // Keep feedback visible briefly, then auto-hide again.
+      setShowControls(true);
+      scheduleAutoHide();
     } else {
-      // First tap — wait to see if second tap comes
       lastTapTimeRef.current = now;
       if (doubleTapTimerRef.current) clearTimeout(doubleTapTimerRef.current);
       doubleTapTimerRef.current = setTimeout(() => {
         doubleTapCountRef.current = 0;
+        doubleTapTimerRef.current = null;
+        toggleControls();
       }, 350);
     }
-  }, [hasIframeHtml, iframeFailed]);
+  }, [hasIframeHtml, iframeFailed, toggleControls, scheduleAutoHide]);
+
+  // Taps on the letterboxed container area outside the <video> (visible in
+  // fullscreen with object-contain) should behave like middle taps.
+  const handleContainerTouchEnd = useCallback((e) => {
+    if (hasIframeHtml || iframeFailed) return;
+    if (e.target.closest('button, input, a, [role="menu"], video')) return;
+    lastVideoTouchRef.current = Date.now();
+    toggleControls();
+  }, [hasIframeHtml, iframeFailed, toggleControls]);
+
+  const handleVideoClick = useCallback((e) => {
+    // Ignore the synthetic click that follows a touch — that gesture
+    // already toggled controls / seeked in handleVideoTouchEnd.
+    if (Date.now() - lastVideoTouchRef.current < 600) {
+      e.preventDefault();
+      return;
+    }
+    togglePlay();
+  }, [togglePlay]);
 
   useEffect(() => {
     if (hasIframeHtml || iframeFailed) return;
@@ -912,23 +1006,17 @@ const initHls = useCallback(() => {
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
-    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
-    hideControlsTimer.current = setTimeout(() => {
-      if (isPlaying) setShowControls(false);
-    }, 3000);
-  }, [isPlaying]);
+    scheduleAutoHide();
+  }, [scheduleAutoHide]);
 
-  const handleTouchStart = useCallback(() => {
-    if (showControls) {
-      setShowControls(false);
-    } else {
-      setShowControls(true);
-      if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
-      hideControlsTimer.current = setTimeout(() => {
-        if (isPlaying) setShowControls(false);
-      }, 4000);
-    }
-  }, [isPlaying, showControls]);
+  // Keep the auto-hide timer alive while the user interacts with the
+  // control bar (its touches/clicks stop propagation and would otherwise
+  // let the bar disappear mid-interaction on mobile).
+  const pokeControls = useCallback((e) => {
+    if (e) e.stopPropagation();
+    setShowControls(true);
+    scheduleAutoHide();
+  }, [scheduleAutoHide]);
 
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -1005,7 +1093,7 @@ const initHls = useCallback(() => {
       style={{ '--cue-lift': `${showControls ? -CUE_LIFT_CONTROLS_VISIBLE : -CUE_LIFT_CONTROLS_HIDDEN}px` }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
-      onTouchStart={handleTouchStart}
+      onTouchEnd={handleContainerTouchEnd}
       onDoubleClick={(e) => {
         // Double-click toggles fullscreen (single click still toggles play on video)
         if (e.target.closest('button, input, a, [role="menu"]')) return;
@@ -1018,7 +1106,7 @@ const initHls = useCallback(() => {
           isFullscreen ? '!aspect-auto !h-screen !max-h-screen' : ''
         } fullscreen:w-full fullscreen:h-full fullscreen:max-h-screen fullscreen:aspect-auto fullscreen:object-contain`}
         poster={poster}
-        onClick={togglePlay}
+        onClick={handleVideoClick}
         onDoubleClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
         onTouchEnd={handleVideoTouchEnd}
         playsInline
@@ -1112,7 +1200,10 @@ const initHls = useCallback(() => {
         className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
-        onTouchStart={(e) => e.stopPropagation()}
+        onTouchStart={pokeControls}
+        onTouchEnd={pokeControls}
+        onTouchMove={pokeControls}
+        onMouseMove={pokeControls}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 pb-3">
