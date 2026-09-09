@@ -1,15 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  getTrendingAnime,
-  getPopularAnime,
-  getRecentAnime,
-  getTopRatedAnime,
+  getHome,
 } from '../api/apiService';
 import HeroCarousel from '../components/HeroCarousel';
 import AnimeCard from '../components/AnimeCard';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, AlertCircle, Sparkles, Heart } from 'lucide-react';
 
 function AnimeRow({ title, subtitle, linkTo, linkText, children }) {
   return (
@@ -17,13 +14,16 @@ function AnimeRow({ title, subtitle, linkTo, linkText, children }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-end justify-between mb-6">
           <div>
-            <h2 className="text-xl md:text-2xl font-black text-white">{title}</h2>
+            <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[var(--accent)]/60" />
+              {title}
+            </h2>
             {subtitle && <p className="text-sm text-[var(--text-muted)] mt-1">{subtitle}</p>}
           </div>
           {linkTo && (
             <Link
               to={linkTo}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[var(--accent)] hover:text-white hover:bg-[var(--accent)]/10 rounded-full border border-[var(--accent)]/20 hover:border-[var(--accent)]/40 transition-all duration-300"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-[var(--accent)] hover:text-white hover:bg-[var(--accent)]/10 rounded-full border border-[var(--accent)]/20 hover:border-[var(--accent)]/40 transition-all duration-300"
             >
               {linkText || 'View All'}
               <ChevronRight className="w-3.5 h-3.5" />
@@ -57,22 +57,11 @@ export default function Home() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const requests = [];
-        if (showTrending) requests.push(getTrendingAnime(1, 10).then(r => ({ key: 'trending', value: r })));
-        if (showPopular) requests.push(getPopularAnime(1, 12).then(r => ({ key: 'popular', value: r })));
-        if (showRecent) requests.push(getRecentAnime(1, 16).then(r => ({ key: 'recent', value: r })));
-        if (showTopRated) requests.push(getTopRatedAnime(1, 12).then(r => ({ key: 'topRated', value: r })));
-
-        const results = await Promise.allSettled(requests);
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            const { key, value } = result.value;
-            if (key === 'trending') setTrending(value.media);
-            else if (key === 'popular') setPopular(value.media);
-            else if (key === 'recent') setRecent(value.media);
-            else if (key === 'topRated') setTopRated(value.media);
-          }
-        }
+        const home = await getHome();
+        if (showTrending) setTrending(home.trending);
+        if (showPopular) setPopular(home.newReleases);
+        if (showRecent) setRecent(home.latestEpisodes);
+        if (showTopRated) setTopRated(home.finishedAir);
       } catch {
         setError('Failed to load content. Please try again later.');
       } finally {
@@ -87,7 +76,10 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center py-32 gap-4">
       <AlertCircle className="w-16 h-16 text-[var(--text-muted)]" />
       <p className="text-lg text-[var(--text-secondary)]">{error}</p>
-      <button className="px-5 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold text-sm rounded-full transition-all" onClick={() => window.location.reload()}>
+      <button
+        className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_20px_rgba(var(--accent-rgb),0.25)]"
+        onClick={() => window.location.reload()}
+      >
         Retry
       </button>
     </div>
@@ -104,7 +96,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-2 pb-8">
         {showPopular && popular.length > 0 && (
           <AnimeRow
             title="New Releases"
@@ -136,14 +128,16 @@ export default function Home() {
                 ))}
               </div>
               <button
-                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-opacity hover:bg-black/90"
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-black/90 hover:scale-110"
                 onClick={() => recentScrollRef.current?.scrollBy({ left: -400, behavior: 'smooth' })}
+                aria-label="Scroll left"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button
-                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-opacity hover:bg-black/90"
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-black/90 hover:scale-110"
                 onClick={() => recentScrollRef.current?.scrollBy({ left: 400, behavior: 'smooth' })}
+                aria-label="Scroll right"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -169,23 +163,37 @@ export default function Home() {
         {!type && (
           <section className="py-16">
             <div className="max-w-7xl mx-auto px-4 sm:px-6">
-              <div className="relative overflow-hidden rounded-2xl glass-panel p-8 md:p-12">
-                <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent)]/8 via-transparent to-indigo-500/8 pointer-events-none" />
-                <div className="absolute -top-20 -right-20 w-60 h-60 bg-[var(--accent)]/10 rounded-full blur-[80px] pointer-events-none" />
-                <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none" />
+              <div className="relative overflow-hidden rounded-3xl glass-panel p-8 md:p-12">
+                {/* Pink ambient decorations */}
+                <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent)]/[0.05] via-transparent to-[var(--accent-deep)]/[0.05] pointer-events-none" />
+                <div className="absolute -top-20 -right-20 w-60 h-60 bg-[var(--accent)]/[0.06] rounded-full blur-[80px] pointer-events-none" />
+                <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-[var(--accent-deep)]/[0.06] rounded-full blur-[80px] pointer-events-none" />
+                {/* Sparkles */}
+                <div className="absolute top-6 right-8 w-2 h-2 rounded-full bg-[var(--accent)] animate-sparkle" style={{ animationDelay: '0.5s' }} />
+                <div className="absolute bottom-8 left-12 w-1.5 h-1.5 rounded-full bg-[var(--accent)]/60 animate-sparkle" style={{ animationDelay: '1.5s' }} />
                 <div className="relative text-center">
-                  <h2 className="text-2xl md:text-3xl font-black text-white mb-3">
-                    Stream Your Favorite Anime
-                  </h2>
-                  <p className="text-[var(--text-secondary)] max-w-xl mx-auto mb-8">
+                  <div className="inline-flex items-center gap-2 mb-4">
+                    <Heart className="w-5 h-5 text-[var(--accent)] animate-heart-beat" fill="currentColor" />
+                    <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+                      Stream Your Favorite Anime
+                    </h2>
+                    <Heart className="w-5 h-5 text-[var(--accent)] animate-heart-beat" fill="currentColor" />
+                  </div>
+                  <p className="text-[var(--text-secondary)] max-w-xl mx-auto mb-8 leading-relaxed">
                     Watch thousands of anime episodes for free. No registration required.
                     New episodes added daily.
                   </p>
                   <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <Link to="/search?type=TRENDING" className="px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]">
+                    <Link
+                      to="/search?type=TRENDING"
+                      className="px-7 py-3 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_30px_rgba(var(--accent-rgb),0.3)] hover:scale-[1.03]"
+                    >
                       Browse Trending
                     </Link>
-                    <Link to="/search?type=NEW" className="px-6 py-3 text-white/70 hover:text-white font-medium text-sm rounded-full border border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.04] transition-all duration-300">
+                    <Link
+                      to="/search?type=NEW"
+                      className="px-7 py-3 text-white/60 hover:text-white font-semibold text-sm rounded-full border border-white/[0.1] hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/[0.06] transition-all duration-300"
+                    >
                       New Releases
                     </Link>
                   </div>

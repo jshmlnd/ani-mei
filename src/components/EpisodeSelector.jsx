@@ -30,10 +30,10 @@ export default function EpisodeSelector({ totalEpisodes, currentEpisode, onEpiso
           {ranges.map((range, idx) => (
             <button
               key={idx}
-              className={`flex-none px-3 py-1.5 text-xs font-semibold rounded-full transition-all duration-300 ${
+              className={`flex-none px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 ${
                 currentRange === idx
-                  ? 'bg-[var(--accent)] text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
-                  : 'bg-white/[0.04] text-[var(--text-muted)] hover:bg-white/[0.08] hover:text-white border border-white/[0.06]'
+                  ? 'bg-[var(--accent)] text-white shadow-sm shadow-[var(--accent)]/25'
+                  : 'bg-white/[0.04] text-[var(--text-muted)] hover:bg-[var(--accent)]/[0.08] hover:text-white border border-[var(--border-subtle)]'
               }`}
               onClick={() => onEpisodeChange(range.start)}
             >
@@ -43,17 +43,17 @@ export default function EpisodeSelector({ totalEpisodes, currentEpisode, onEpiso
         </div>
       )}
 
-      <div ref={gridRef} className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1.5 max-h-[280px] overflow-y-auto pr-1 scrollbar-hide">
+      <div ref={gridRef} className="grid grid-cols-10 sm:grid-cols-10 md:grid-cols-20 gap-1.5 max-h-[280px] overflow-y-auto pr-1 scrollbar-hide">
         {Array.from({ length: end - start + 1 }, (_, i) => {
           const ep = start + i;
           return (
             <button
               key={ep}
               data-ep={ep}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+              className={`py-2 text-sm font-semibold rounded-full cursor-pointer transition-all duration-200 ${
                 currentEpisode === ep
-                  ? 'bg-[var(--accent)] text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
-                  : 'bg-white/[0.03] text-[var(--text-muted)] hover:bg-white/[0.08] hover:text-white border border-white/[0.04] hover:border-white/[0.1]'
+                  ? 'bg-[var(--accent)] text-white shadow-sm shadow-[var(--accent)]/25'
+                  : 'bg-white/[0.03] text-[var(--text-muted)] hover:bg-[var(--accent)]/[0.08] hover:text-white border border-[var(--border-subtle)] hover:border-[var(--accent)]/[0.2]'
               }`}
               onClick={() => onEpisodeChange(ep)}
             >

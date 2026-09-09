@@ -45,7 +45,7 @@ export default function ServerSelector({
   if (loading) {
     return (
       <div className="flex items-center gap-3 py-4 px-1">
-        <span className="loading loading-spinner loading-sm text-[var(--accent)]"></span>
+        <div className="w-4 h-4 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
         <span className="text-xs font-medium text-[var(--text-muted)]">Loading servers...</span>
       </div>
     );
@@ -53,7 +53,7 @@ export default function ServerSelector({
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 py-3 px-3 rounded-lg bg-red-500/5 border border-red-500/10">
+      <div className="flex items-center gap-2 py-3 px-3 rounded-xl bg-red-500/5 border border-red-500/10">
         <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
         <span className="text-xs text-red-300/80">{error}</span>
       </div>
@@ -62,14 +62,13 @@ export default function ServerSelector({
 
   if (!hasServers) {
     return (
-      <div className="py-3 px-3 rounded-lg bg-white/[0.02] border border-white/[0.04] text-center">
+      <div className="py-4 px-3 rounded-xl bg-[var(--accent)]/[0.03] border border-[var(--border-subtle)] text-center">
         <p className="text-xs text-[var(--text-muted)]">No servers available for this episode</p>
-        <p className="text-[10px] text-[var(--text-muted)]/70 mt-1">Try switching episode or check back later</p>
+        <p className="text-[10px] text-[var(--text-muted)]/60 mt-1">Try switching episode or check back later</p>
       </div>
     );
   }
 
-  // If servers grouped but we also have flat as fallback (no grouping), show flat as single group
   const isGrouped = serverKeys.length > 0;
 
   return (
@@ -78,7 +77,7 @@ export default function ServerSelector({
         <Server className="w-3.5 h-3.5 text-[var(--accent)]" />
         <span className="text-xs font-bold tracking-widest text-white uppercase">Servers</span>
         {flat.length > 0 && (
-          <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-[var(--text-muted)] border border-white/[0.06]">
+          <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--accent)]/[0.08] text-[var(--accent)] border border-[var(--accent)]/[0.15]">
             {flat.length} available
           </span>
         )}
@@ -97,19 +96,19 @@ export default function ServerSelector({
                   <span className="text-[10px] font-bold tracking-widest text-[var(--text-muted)] uppercase">
                     {formatType(type)}
                   </span>
-                  <span className="text-[10px] text-[var(--text-muted)]/60">• {list.length}</span>
+                  <span className="text-[10px] text-[var(--text-muted)]/50">• {list.length}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {list.map((srv) => {
-                    const isActive = selected?.linkId === srv.linkId;
+                  {list.map((srv, i) => {
+                    const isActive = (selected?.linkId && selected?.linkId === srv.linkId) || (selected?.id && selected?.id === srv.id);
                     return (
                       <button
-                        key={srv.linkId}
+                        key={srv.linkId || srv.id || `${srv.name}-${type}-${i}`}
                         onClick={() => onSelect(srv)}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ${
+                        className={`px-3.5 py-1.5 text-xs font-semibold cursor-pointer rounded-full border transition-all duration-200 ${
                           isActive
-                            ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-[0_0_12px_rgba(238,174,202,0.35)]'
-                            : 'bg-white/[0.03] text-[var(--text-muted)] border-white/[0.06] hover:bg-white/[0.08] hover:text-white hover:border-white/[0.1]'
+                            ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
+                            : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white hover:border-[var(--accent)]/[0.2]'
                         }`}
                         title={`${srv.name} (${type})`}
                       >
@@ -124,16 +123,16 @@ export default function ServerSelector({
         </div>
       ) : (
         <div className="flex flex-wrap gap-1.5">
-          {flat.map((srv) => {
-            const isActive = selected?.linkId === srv.linkId;
+          {flat.map((srv, i) => {
+            const isActive = (selected?.linkId && selected?.linkId === srv.linkId) || (selected?.id && selected?.id === srv.id);
             return (
               <button
-                key={srv.linkId}
+                key={srv.linkId || srv.id || `${srv.name}-${srv.type}-${i}`}
                 onClick={() => onSelect(srv)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-all ${
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ${
                   isActive
-                    ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-[0_0_12px_rgba(238,174,202,0.35)]'
-                    : 'bg-white/[0.03] text-[var(--text-muted)] border-white/[0.06] hover:bg-white/[0.08] hover:text-white'
+                    ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
+                    : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white'
                 }`}
               >
                 {srv.name} <span className="opacity-60 ml-1 text-[10px]">{srv.type?.toUpperCase()}</span>
@@ -144,11 +143,11 @@ export default function ServerSelector({
       )}
 
       {selected && (
-        <div className="flex items-center gap-1.5 pt-2 border-t border-white/[0.04] mt-3">
+        <div className="flex items-center gap-1.5 pt-2 border-t border-[var(--border-subtle)] mt-3">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-[11px] text-[var(--text-muted)]">
             Playing via <span className="font-semibold text-[var(--text-secondary)]">{selected.name}</span>
-            <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/20">
+            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/20">
               {formatType(selected.type)}
             </span>
           </span>

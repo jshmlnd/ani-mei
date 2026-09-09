@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchAnime } from '../api/apiService';
+import { searchAnime, getDisplayTitle } from '../api/apiService';
 import { Search } from 'lucide-react';
 
 const SearchBar = ({ compact = false }) => {
@@ -19,8 +19,8 @@ const SearchBar = ({ compact = false }) => {
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const data = await searchAnime(query.trim());
-        setResults(Array.isArray(data) ? data.slice(0, 8) : []);
+        const data = await searchAnime(query.trim(), 1, 8);
+        setResults(data?.media || []);
         setShowDropdown(true);
       } catch {
         setResults([]);
@@ -48,7 +48,8 @@ const SearchBar = ({ compact = false }) => {
   return (
     <div className={`relative ${compact ? '' : 'w-full max-w-lg'}`}>
       <form onSubmit={handleSubmit}>
-        <div className="join w-full">
+        <div className="relative group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25 group-focus-within:text-[var(--accent)] transition-colors duration-300" />
           <input
             type="text"
             placeholder="Search anime..."
@@ -56,38 +57,35 @@ const SearchBar = ({ compact = false }) => {
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => results.length > 0 && setShowDropdown(true)}
             onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-            className={`input input-bordered join-item ${compact ? 'input-sm' : ''} w-full focus:outline-none focus:border-primary`}
+            className={`w-full pl-9 pr-10 bg-white/[0.04] border border-white/[0.08] rounded-full outline-none text-white placeholder-white/25 focus:border-[var(--accent)]/40 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(var(--accent-rgb),0.08)] transition-all duration-300 ${
+              compact ? 'py-1.5 text-xs' : 'py-2.5 text-sm'
+            }`}
           />
-          <button
-            type="submit"
-            className={`btn btn-primary join-item ${compact ? 'btn-sm' : ''}`}
-          >
-            {loading ? (
-              <span className="loading loading-spinner loading-sm" />
-            ) : (
-              <Search className="h-5 w-5" />
-            )}
-          </button>
+          {loading && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="w-4 h-4 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
+            </div>
+          )}
         </div>
       </form>
 
       {showDropdown && results.length > 0 && (
-        <div className="absolute top-full mt-1 left-0 right-0 bg-base-100 border border-base-300 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+        <div className="absolute top-full mt-2 left-0 right-0 glass-panel rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50 animate-slide-in-down" style={{ animationDuration: '0.2s' }}>
           {results.map((anime) => (
             <button
-              key={anime.animeId}
-              onMouseDown={() => handleSelect(anime.animeId)}
-              className="flex items-center gap-3 w-full px-4 py-2 hover:bg-base-200 transition-colors text-left"
+              key={anime.id}
+              onMouseDown={() => handleSelect(anime.id)}
+              className="flex items-center gap-3 w-full p-3 hover:bg-white/[0.06] transition-colors text-left border-b border-white/[0.04] last:border-0"
             >
               <img
-                src={anime.animeImg}
-                alt={anime.animeTitle}
-                className="w-10 h-14 object-cover rounded"
+                src={anime.coverImage?.medium || anime.coverImage?.large || anime.poster}
+                alt={getDisplayTitle(anime)}
+                className="w-10 h-14 object-cover rounded-lg"
               />
-              <div>
-                <p className="text-sm font-medium line-clamp-1">{anime.animeTitle}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{getDisplayTitle(anime)}</p>
                 {anime.status && (
-                  <p className="text-xs text-base-content/50">{anime.status}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{anime.status}</p>
                 )}
               </div>
             </button>

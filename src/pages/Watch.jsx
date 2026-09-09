@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   getAnimeById,
   getDisplayTitle,
   getEpisodeCount,
-  getStreamUrl,
-  getAnimeServers,
-  getServers,
-  getStreamByLinkId,
+  getEpisodeStream,
+  getTracksForEpisode,
 } from '../api/apiService';
 import { stripHtml, formatDate } from '../utils/helpers';
 import VideoPlayer from '../components/VideoPlayer';
@@ -21,225 +19,126 @@ export default function Watch() {
   const navigate = useNavigate();
   const [anime, setAnime] = useState(null);
   const [episode, setEpisode] = useState(1);
-  const [streamUrl, setStreamUrl] = useState('');
-  const [streamFallback, setStreamFallback] = useState('');
-  const [streamHeaders, setStreamHeaders] = useState({});
-  const [iframeHtml, setIframeHtml] = useState('');
-  const [skipData, setSkipData] = useState(null);
-  const [sourceInfo, setSourceInfo] = useState(null);
-  const streamHeadersRef = useRef(streamHeaders);
+  const [track, setTrack] = useState('sub');
+  const [stream, setStream] = useState(null);
   const [streamLoading, setStreamLoading] = useState(false);
   const [streamError, setStreamError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showFullDesc, setShowFullDesc] = useState(false);
 
-  // server selector state — fetched from /servers/:slug/:episode
-  const [servers, setServers] = useState({});
-  const [flatServers, setFlatServers] = useState([]);
-  const [selectedServer, setSelectedServer] = useState(null);
-  const [serversLoading, setServersLoading] = useState(false);
-  const [serversError, setServersError] = useState(null);
-  const [resolvedSlug, setResolvedSlug] = useState('');
-
+  // ---- Anime details ----
   useEffect(() => {
+    let cancelled = false;
     const fetchAnime = async () => {
       try {
         setLoading(true);
+        setError(null);
+        setEpisode(1);
+        setTrack('sub');
+        setStream(null);
+        setStreamError(null);
         const data = await getAnimeById(id);
-        setAnime(data);
+        if (!cancelled) setAnime(data);
       } catch {
-        setError('Failed to load anime details');
+        if (!cancelled) setError('Failed to load anime details');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     if (id) fetchAnime();
+    return () => { cancelled = true; };
   }, [id]);
 
-  // Fetch servers for current episode via server-selector API
-  // Prefers direct slug if available (stream lists guarantee a valid slug),
-  // falling back to title-search for legacy AniList entries.
+  const totalEpisodes = anime ? getEpisodeCount(anime) : 0;
+
+  // Current catalog episode entry (id used by /api/stream/catalog/:epId)
+  const currentEpEntry = useMemo(() => {
+    if (!anime || !Array.isArray(anime.episodesList)) return null;
+    return anime.episodesList.find((e) => e.number === episode) || null;
+  }, [anime, episode]);
+
+  const availableTracks = useMemo(
+    () => (anime ? getTracksForEpisode(anime, currentEpEntry) : ['sub']),
+    [anime, currentEpEntry]
+  );
+
+  // Effective track — falls back to the first available track when the
+  // preferred one isn't offered for this episode (derived, no effect needed)
+  const effectiveTrack = availableTracks.includes(track) ? track : (availableTracks[0] || 'sub');
+
+  // ServerSelector adapter — the backend exposes SUB/DUB tracks per episode
+  const servers = useMemo(() => {
+    const groups = {};
+    for (const t of availableTracks) {
+      groups[t] = [{ id: t, linkId: t, name: 'MegaPlay', type: t, track: t }];
+    }
+    return groups;
+  }, [availableTracks]);
+  const flatServers = useMemo(() => Object.values(servers).flat(), [servers]);
+  const selectedServer = servers[effectiveTrack]?.[0] || null;
+
+  // ---- Stream ----
   useEffect(() => {
     if (!anime) return;
     let cancelled = false;
-    const fetchServers = async () => {
-      setServersLoading(true);
-      setServersError(null);
-      setServers({});
-      setFlatServers([]);
-      setSelectedServer(null);
-      // clear previous stream while new episode servers load
-      setStreamUrl('');
-      setStreamFallback('');
-      setStreamHeaders({});
-      setIframeHtml('');
-      setSkipData(null);
-      setSourceInfo(null);
-      setStreamError(null);
-      try {
-        const directSlug = anime.slug || (typeof anime.id === 'string' && anime.id.includes('-') ? anime.id : null) || (typeof id === 'string' && id.includes('-') ? id : null);
-        // 1) Try direct slug path (fast, exact match to stream API)
-        if (directSlug && directSlug.includes('-')) {
-          try {
-            const direct = await getServers(directSlug, episode);
-            if (cancelled) return;
-            if (direct.flat?.length || Object.keys(direct.servers || {}).length) {
-              setServers(direct.servers || {});
-              setFlatServers(direct.flat || []);
-              setResolvedSlug(direct.slug || directSlug);
-              const preferred = direct.servers?.sub?.[0] || direct.servers?.dub?.[0] || (direct.flat || [])[0] || null;
-              if (preferred) setSelectedServer(preferred);
-              return;
-            }
-          } catch (_e) { void _e; }
-        }
-        // 2) Fallback: title-based search ranking (for AniList numeric IDs or missing slug)
-        const title = anime.title?.english || anime.title?.romaji || getDisplayTitle(anime) || '';
-        const data = await getAnimeServers(title, episode);
-        if (cancelled) return;
-        const srv = data.servers || {};
-        const flat = data.flat || [];
-        setServers(srv);
-        setFlatServers(flat);
-        setResolvedSlug(data.slug || directSlug || '');
-        // auto-pick best server: prefer SUB first, then first flat entry
-        const preferred = srv.sub?.[0] || srv.dub?.[0] || flat[0] || null;
-        if (preferred) {
-          setSelectedServer(preferred);
-        } else if (!flat.length && !Object.keys(srv).length) {
-          // No servers found — will fallback to legacy stream attempt in stream effect
-          setServersError(null);
-        }
-      } catch (e) {
-        if (!cancelled) setServersError(e?.message || 'Failed to load servers');
-      } finally {
-        if (!cancelled) setServersLoading(false);
-      }
-    };
-    fetchServers();
-    return () => { cancelled = true; };
-  }, [anime, episode, id]);
-
-  // Fetch stream for the selected server; fallback to legacy getStreamUrl if no servers
-  useEffect(() => {
-    if (!anime) return;
-    // If servers are still loading, wait
-    if (serversLoading) return;
-
-    let cancelled = false;
-
     const fetchStream = async () => {
       setStreamLoading(true);
       setStreamError(null);
+      setStream(null);
       try {
-        if (selectedServer?.linkId) {
-          const data = await getStreamByLinkId(selectedServer.linkId, streamHeadersRef.current);
-          if (cancelled) return;
-          
-          // PRIMARY: Worker iframe (preserves subtitles, qualities, sandbox)
-          // Also set m3u8 as HLS source for fallback when iframe fails
-          if (data.iframe) {
-            setIframeHtml(data.iframe);
-            setStreamUrl(data.m3u8 || '');  // Use m3u8 for HLS fallback
-            setStreamFallback(data.url || '');  // Embed URL as fallback
-            setStreamHeaders(data.m3u8Headers || {});
-            setSkipData(data.skipData || null);
-            setSourceInfo(data.sourceInfo || null);
-            return;
-          }
-          
-          // SECONDARY: Direct m3u8 playback (if worker couldn't provide iframe)
-          if (data.m3u8) {
-            setIframeHtml('');      // Clear iframe
-            setStreamUrl(data.m3u8);
-            setStreamFallback(data.url || '');
-            setStreamHeaders(data.m3u8Headers || {});
-            setSkipData(data.skipData || null);
-            setSourceInfo(data.sourceInfo || null);
-            return;
-          }
-          
-          // Server returned empty → fallback to legacy
-          throw new Error('Server returned no stream');
-        }
-
-        // No server selected (empty server list) → legacy fallback via getStreamUrl
-        // This keeps old behavior for titles where /servers returns nothing
-        if (!flatServers.length && Object.keys(servers).length === 0 && !serversLoading) {
-          const title = anime.title?.english || anime.title?.romaji || '';
-          const data = await getStreamUrl(title, episode);
-          if (cancelled) return;
-          if (data.iframe) {
-            setIframeHtml(data.iframe);
-            setStreamUrl(data.m3u8 || '');
-            setStreamFallback(data.url || '');
-            setStreamHeaders(data.m3u8Headers || {});
-            setSkipData(data.skipData || null);
-            setSourceInfo(data.sourceInfo || null);
-            return;
-          }
-          if (data.m3u8) {
-            setIframeHtml('');
-            setStreamUrl(data.m3u8);
-            setStreamFallback(data.url || '');
-            setStreamHeaders(data.m3u8Headers || {});
-            setSkipData(data.skipData || null);
-            setSourceInfo(data.sourceInfo || null);
-            return;
-          }
-          // if legacy also empty, we show unavailable (handled by render)
-          return;
-        }
-
-        // Edge: servers exist but none selected yet
-        setStreamUrl('');
-        setStreamFallback('');
-        setIframeHtml('');
-      } catch (_err) {
-        void _err;
-        if (cancelled) return;
-        // Try legacy as last resort before showing error
-        try {
-          const title = anime.title?.english || anime.title?.romaji || '';
-          const fallback = await getStreamUrl(title, episode);
-          if (fallback?.iframe) {
-            setIframeHtml(fallback.iframe);
-            setStreamUrl(fallback.m3u8 || '');
-            setStreamFallback(fallback.url || '');
-            setStreamHeaders(fallback.m3u8Headers || {});
-            setSkipData(fallback.skipData || null);
-            setSourceInfo(fallback.sourceInfo || null);
-            return;
-          }
-          if (fallback?.m3u8 || fallback?.embedUrl) {
-            setIframeHtml('');
-            setStreamUrl(fallback.m3u8 || '');
-            setStreamFallback(fallback.embedUrl || fallback.url || '');
-            setStreamHeaders(fallback.m3u8Headers || {});
-            setSkipData(fallback.skipData || null);
-            setSourceInfo(fallback.sourceInfo || null);
-            return;
-          }
-        } catch (_e) { void _e; }
-        setStreamError('Failed to load stream \u2014 try another server or episode');
+        const data = await getEpisodeStream({
+          catalogEpId: currentEpEntry?.id || null,
+          aniId: anime.aniId || null,
+          malId: anime.malId || null,
+          episode,
+          track: effectiveTrack,
+        });
+        if (!cancelled) setStream(data);
+      } catch (e) {
+        if (!cancelled) setStreamError(e?.message || 'Failed to load stream — try another server or episode');
       } finally {
         if (!cancelled) setStreamLoading(false);
       }
     };
-
     fetchStream();
     return () => { cancelled = true; };
-  }, [anime, episode, selectedServer, servers, flatServers, serversLoading]);
-
-  // Keep the ref in sync with streamHeaders state
-  useEffect(() => {
-    streamHeadersRef.current = streamHeaders;
-  }, [streamHeaders]);
+  }, [anime, episode, effectiveTrack, currentEpEntry]);
 
   const handleEpisodeChange = (ep) => {
-    setEpisode(ep);
+    const max = Math.max(1, totalEpisodes || 1);
+    const clamped = Math.min(Math.max(1, ep), max);
+    if (clamped === episode) return;
+    setEpisode(clamped);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Previous / Next — prefer catalog order when episodesList exists
+  // so gaps in numbering can't land on a missing episode.
+  const currentEpIndex = Array.isArray(anime?.episodesList)
+    ? anime.episodesList.findIndex((e) => e.number === episode)
+    : -1;
+  const hasPrevEpisode = currentEpIndex >= 0 ? currentEpIndex > 0 : episode > 1;
+  const hasNextEpisode = currentEpIndex >= 0
+    ? currentEpIndex < anime.episodesList.length - 1
+    : episode < totalEpisodes;
+
+  const goToPrevEpisode = () => {
+    if (!hasPrevEpisode) return;
+    if (currentEpIndex >= 0) {
+      handleEpisodeChange(anime.episodesList[currentEpIndex - 1].number);
+    } else {
+      handleEpisodeChange(episode - 1);
+    }
+  };
+
+  const goToNextEpisode = () => {
+    if (!hasNextEpisode) return;
+    if (currentEpIndex >= 0) {
+      handleEpisodeChange(anime.episodesList[currentEpIndex + 1].number);
+    } else {
+      handleEpisodeChange(episode + 1);
+    }
   };
 
   if (loading) return <LoadingSpinner />;
@@ -247,7 +146,10 @@ export default function Watch() {
     <div className="flex flex-col items-center justify-center py-32 gap-4">
       <AlertCircle className="w-16 h-16 text-[var(--text-muted)]" />
       <p className="text-lg text-[var(--text-secondary)]">{error}</p>
-      <button className="px-5 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold text-sm rounded-full transition-all" onClick={() => navigate('/')}>
+      <button
+        className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all duration-300"
+        onClick={() => navigate('/')}
+      >
         Go Home
       </button>
     </div>
@@ -255,33 +157,35 @@ export default function Watch() {
   if (!anime) return null;
 
   const title = getDisplayTitle(anime);
-  const totalEpisodes = getEpisodeCount(anime);
   const description = stripHtml(anime.description || anime.synopsis || '');
   const relations = anime.relations?.edges?.filter(
     (e) => e.relationType === 'SEQUEL' || e.relationType === 'PREQUEL' || e.relationType === 'RELATED'
   ) || [];
+  const hasStream = !!(stream?.m3u8);
 
   return (
     <div className="min-h-screen bg-[var(--bg-deep)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-20 pb-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
           <div className="space-y-5">
-            {serversLoading || streamLoading ? (
-              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-xl flex items-center justify-center glow-shadow">
+            {/* Video Player */}
+            {streamLoading ? (
+              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-2xl flex items-center justify-center border border-[var(--border-subtle)]">
                 <div className="text-center">
-                  <span className="loading loading-spinner loading-lg text-[var(--accent)]"></span>
-                  <p className="text-sm text-[var(--text-muted)] mt-3">{serversLoading ? 'Loading servers...' : 'Loading stream...'}</p>
+                  <div className="w-10 h-10 mx-auto rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
+                  <p className="text-sm text-[var(--text-muted)] mt-3">Loading stream...</p>
                 </div>
               </div>
             ) : streamError ? (
-              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-xl flex items-center justify-center glow-shadow">
+              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-2xl flex items-center justify-center border border-[var(--border-subtle)]">
                 <div className="text-center px-4">
                   <AlertTriangle className="w-14 h-14 mx-auto text-red-400/50 mb-3" />
                   <p className="text-sm text-red-400/80 font-medium">{streamError}</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">Try a different track or episode</p>
                 </div>
               </div>
-            ) : !streamUrl && !streamFallback && !iframeHtml ? (
-              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-xl flex items-center justify-center glow-shadow">
+            ) : !hasStream ? (
+              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-2xl flex items-center justify-center border border-[var(--border-subtle)]">
                 <div className="text-center px-4">
                   <CircleOff className="w-14 h-14 mx-auto text-red-400/50 mb-3" />
                   <p className="text-sm text-red-400/80 font-medium">Stream unavailable for this episode</p>
@@ -289,60 +193,81 @@ export default function Watch() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl overflow-hidden glow-shadow">
+              <div className="rounded-2xl overflow-hidden border border-[var(--border-subtle)]">
                 <VideoPlayer
-                  src={streamUrl}
-                  fallbackSrc={streamFallback}
-                  headers={streamHeaders}
-                  iframeHtml={iframeHtml}
-                  skipData={skipData}
-                  sourceInfo={sourceInfo}
-                  onIframeError={() => {
-                    setIframeHtml('');
-                    if (streamFallback) setStreamUrl(streamFallback);
-                  }}
+                  key={`${anime.id}-${episode}-${effectiveTrack}`}
+                  src={stream.m3u8}
+                  headers={{}}
+                  iframeHtml=""
+                  skipData={null}
+                  sourceInfo={stream.sourceInfo}
+                  extSubtitles={stream.subtitles}
+                  intro={stream.intro}
+                  outro={stream.outro}
                   poster={anime.bannerImage || anime.coverImage?.large || anime.poster}
                   title={`${title} - Episode ${episode}`}
                 />
               </div>
             )}
 
-            <div className="glass-panel rounded-xl p-5">
+            {/* Episode Navigation */}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <button
+                type="button"
+                disabled={!hasPrevEpisode}
+                onClick={goToPrevEpisode}
+                className="btn btn-dash rounded-full border-[var(--accent)]/80 text-[var(--accent)] hover:bg-[var(--accent)]/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              >
+                Previous Episode
+              </button>
+              <button
+                type="button"
+                disabled={!hasNextEpisode}
+                onClick={goToNextEpisode}
+                className="btn btn-dash rounded-full border-[var(--accent)]/80 text-[var(--accent)] hover:bg-[var(--accent)]/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              >
+                Next Episode
+              </button>
+            </div>
+
+            {/* Server Selector */}
+            <div className="glass-panel rounded-2xl p-5">
               <ServerSelector
                 servers={servers}
                 flat={flatServers}
                 selected={selectedServer}
                 onSelect={(srv) => {
-                  setSelectedServer(srv);
+                  if (srv?.track) setTrack(srv.track);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                loading={serversLoading}
-                error={serversError}
+                loading={false}
+                error={null}
               />
-              {resolvedSlug && !serversLoading && (
-                <p className="mt-3 text-[10px] text-[var(--text-muted)]/60 truncate">
-                  Source: {resolvedSlug}
+              {anime.aniId && (
+                <p className="mt-3 text-[10px] text-[var(--text-muted)]/50 truncate">
+                  AniList #{anime.aniId}{anime.malId ? ` · MAL #${anime.malId}` : ''}
                 </p>
               )}
             </div>
 
-            <div className="glass-panel rounded-xl p-5">
+            {/* Episode Info */}
+            <div className="glass-panel rounded-2xl p-5">
               <div className="flex items-center gap-2 text-sm mb-3">
-                <span className="px-2.5 py-1 text-xs font-bold bg-[var(--accent)]/15 text-[var(--accent)] rounded-full">
+                <span className="px-3 py-1.5 text-xs font-bold bg-[var(--accent)]/15 text-[var(--accent)] rounded-full border border-[var(--accent)]/20">
                   EP {episode}
                 </span>
                 <span className="text-[var(--text-muted)]">/ {totalEpisodes} Episodes</span>
               </div>
-              <h1 className="text-xl md:text-2xl font-black text-white">{title}</h1>
+              <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">{title}</h1>
               {anime.title?.romaji && anime.title?.romaji !== title && (
-                <p className="text-sm text-[var(--text-muted)] mt-1">{anime.title.romaji}</p>
+                <p className="text-sm text-[var(--accent)]/60 mt-1">{anime.title.romaji}</p>
               )}
 
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {anime.genres?.map((genre) => {
                   const g = typeof genre === 'string' ? genre : genre?.name;
                   return (
-                    <span key={g} className="px-2.5 py-1 text-xs font-medium bg-white/[0.05] text-[var(--text-secondary)] rounded-full border border-white/[0.06]">
+                    <span key={g} className="px-3 py-1 text-xs font-medium bg-[var(--accent)]/[0.08] text-[var(--accent)]/80 rounded-full border border-[var(--accent)]/[0.15]">
                       {g}
                     </span>
                   );
@@ -350,14 +275,14 @@ export default function Watch() {
               </div>
 
               {relations.length > 0 && (
-                <div className="mt-4 p-3 bg-white/[0.02] rounded-lg border border-white/[0.04]">
+                <div className="mt-4 p-3 bg-[var(--accent)]/[0.03] rounded-xl border border-[var(--accent)]/[0.08]">
                   <p className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">Related</p>
                   <div className="flex flex-wrap gap-2">
                     {relations.map((rel) => (
                       <button
                         key={rel.node.id}
-                        className="px-2.5 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10 rounded-full border border-[var(--accent)]/20 transition-all"
-                        onClick={() => navigate(`/anime/${rel.node.id}`)}
+                        className="px-3 py-1 text-xs font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/10 rounded-full border border-[var(--accent)]/20 transition-all duration-200"
+                        onClick={() => navigate(`/anime/ani-${rel.node.id}`)}
                       >
                         {rel.relationType}: {rel.node.title?.english || rel.node.title?.romaji}
                       </button>
@@ -367,8 +292,9 @@ export default function Watch() {
               )}
             </div>
 
-            <div className="glass-panel rounded-xl p-5">
-              <h3 className="font-bold text-white mb-3">Episodes</h3>
+            {/* Episode Selector */}
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="font-bold text-white mb-3 text-sm uppercase tracking-wider">Episodes</h3>
               <EpisodeSelector
                 totalEpisodes={totalEpisodes}
                 currentEpisode={episode}
@@ -376,14 +302,15 @@ export default function Watch() {
               />
             </div>
 
-            <div className="glass-panel rounded-xl p-5">
-              <h3 className="font-bold text-white mb-3">Synopsis</h3>
+            {/* Synopsis */}
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="font-bold text-white mb-3 text-sm uppercase tracking-wider">Synopsis</h3>
               <p className={`text-sm text-[var(--text-secondary)] leading-relaxed ${!showFullDesc ? 'line-clamp-4' : ''}`}>
                 {description}
               </p>
               {description.length > 300 && (
                 <button
-                  className="mt-2 text-xs font-medium text-[var(--accent)] hover:text-white transition-colors"
+                  className="mt-2 text-xs font-semibold text-[var(--accent)] cursor-pointer hover:text-white transition-colors duration-200"
                   onClick={() => setShowFullDesc(!showFullDesc)}
                 >
                   {showFullDesc ? 'Show less' : 'Read more'}
@@ -392,12 +319,13 @@ export default function Watch() {
             </div>
           </div>
 
+          {/* Sidebar */}
           <div className="space-y-4">
-            <div className="glass-panel rounded-xl p-5 sticky top-20">
-              <h3 className="font-bold text-white mb-4">Anime Details</h3>
+            <div className="glass-panel rounded-2xl p-5 top-20">
+              <h3 className="font-bold text-white mb-4 text-sm uppercase tracking-wider">Anime Details</h3>
               <div className="space-y-4">
                 {(anime.coverImage?.large || anime.poster) && (
-                  <div className="relative rounded-lg overflow-hidden">
+                  <div className="relative rounded-xl overflow-hidden">
                     <img
                       src={anime.coverImage?.large || anime.poster}
                       alt={title}
@@ -419,10 +347,10 @@ export default function Watch() {
                       <span className="text-[var(--text-secondary)] font-medium">{anime.status}</span>
                     </div>
                   )}
-                  {anime.episodes && (
+                  {totalEpisodes > 0 && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Episodes</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{anime.episodes}</span>
+                      <span className="text-[var(--text-secondary)] font-medium">{totalEpisodes}</span>
                     </div>
                   )}
                   {anime.season && anime.seasonYear && (
@@ -453,15 +381,15 @@ export default function Watch() {
               </div>
 
               {anime.characters?.nodes?.length > 0 && (
-                <div className="mt-5 pt-5 border-t border-white/[0.06]">
-                  <h4 className="font-bold text-sm text-white mb-3">Characters</h4>
+                <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">
+                  <h4 className="font-bold text-sm text-white mb-3 uppercase tracking-wider">Characters</h4>
                   <div className="space-y-2.5">
                     {anime.characters.nodes.map((char, idx) => (
-                      <div key={idx} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-white/[0.03] transition-colors">
+                      <div key={idx} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-[var(--accent)]/[0.05] transition-colors duration-200">
                         <img
                           src={char.image?.large}
                           alt={char.name?.full}
-                          className="w-9 h-9 rounded-full object-cover ring-2 ring-white/[0.06]"
+                          className="w-9 h-9 rounded-full object-cover ring-2 ring-[var(--accent)]/20"
                           loading="lazy"
                         />
                         <div className="flex-1 min-w-0">

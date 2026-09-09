@@ -29,7 +29,7 @@ export default function LazyImage({ src, alt, className = '', ...props }) {
           ref={imgRef}
           data-src={src}
           alt={alt}
-          className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          className={`w-full h-full object-cover transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
           loading="lazy"
           onLoad={() => setLoaded(true)}
           onError={() => setError(true)}
@@ -37,11 +37,13 @@ export default function LazyImage({ src, alt, className = '', ...props }) {
         />
       )}
       {!loaded && !error && (
-        <div className="absolute inset-0 bg-base-300 animate-pulse" />
+        <div className="absolute inset-0 bg-[var(--bg-elevated)]">
+          <div className="animate-shimmer w-full h-full" />
+        </div>
       )}
       {error && (
-        <div className="absolute inset-0 bg-base-300 flex items-center justify-center">
-          <ImageIcon className="w-8 h-8 text-base-content/20" />
+        <div className="absolute inset-0 bg-[var(--bg-elevated)] flex items-center justify-center">
+          <ImageIcon className="w-8 h-8 text-[var(--text-muted)]" />
         </div>
       )}
     </div>
