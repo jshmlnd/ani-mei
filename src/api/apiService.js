@@ -4,7 +4,8 @@ import axios from 'axios';
 //   Catalog : /api/catalog/recent?page=&per_page=  /api/catalog/series/:id
 //   Stream  : /api/stream/catalog/:epId/:track  /api/stream/ani/:aniId/:ep/:track
 //            /api/stream/mal/:malId/:ep/:track
-// Search has no backend route, so keyword search uses the public AniList GraphQL API.
+// Listings + search: AniList GraphQL first, Jikan (MyAnimeList) fallback,
+// catalog pool as last resort. Cards carry `ani-` / `mal-` / catalog ids.
 const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://aniko-backend.rk18109ry.workers.dev';
 
 export const streamApiBase = STREAM_API;
@@ -123,10 +124,7 @@ function topByScore(items, n) {
     .slice(0, n);
 }
 
-async function fetchHome() {
-  const now = Date.now();
-  if (_homeCache && (now - _homeCacheTime) < HOME_CACHE_TTL) return _homeCache;
-
+async function fetchCatalogHome() {
   const settled = await Promise.allSettled([
     fetchCatalogRecent(1, 24),
     fetchCatalogRecent(2, 24),
@@ -152,14 +150,48 @@ async function fetchHome() {
     latestEpisodes: unique.slice(12, 36),
     finishedAir: finished.slice(0, 12),
   };
-  _homeCache = result;
-  _homeCacheTime = now;
   return result;
 }
 
 export async function getHome() {
+  const now = Date.now();
+  if (_homeCache && (now - _homeCacheTime) < HOME_CACHE_TTL) return _homeCache;
+
+  // 1) AniList — all four sections in a single batched query
   try {
-    return await fetchHome();
+    const home = await fetchAniListHome();
+    _homeCache = home;
+    _homeCacheTime = now;
+    return home;
+  } catch (e) {
+    console.warn('[getHome] AniList failed:', e?.message);
+  }
+
+  // 2) Jikan (MyAnimeList) — then fill any empty sections from the catalog pool
+  try {
+    const home = await fetchJikanHome();
+    if (!home.trending.length || !home.newReleases.length || !home.latestEpisodes.length || !home.finishedAir.length) {
+      try {
+        const cat = await fetchCatalogHome();
+        if (!home.trending.length) home.trending = cat.trending;
+        if (!home.newReleases.length) home.newReleases = cat.newReleases;
+        if (!home.latestEpisodes.length) home.latestEpisodes = cat.latestEpisodes;
+        if (!home.finishedAir.length) home.finishedAir = cat.finishedAir;
+      } catch { /* catalog also failed — serve the partial result */ }
+    }
+    _homeCache = home;
+    _homeCacheTime = now;
+    return home;
+  } catch (e) {
+    console.warn('[getHome] Jikan failed:', e?.message);
+  }
+
+  // 3) Catalog last resort
+  try {
+    const home = await fetchCatalogHome();
+    _homeCache = home;
+    _homeCacheTime = now;
+    return home;
   } catch (e) {
     console.warn('[getHome] failed:', e?.message);
     return { trending: [], newReleases: [], latestEpisodes: [], finishedAir: [] };
@@ -202,13 +234,22 @@ function toPageInfo(pagination, perPage, page, length) {
   };
 }
 
-// Public listing adapters — backed by catalog pagination
+// Public listing adapters — AniList → Jikan → catalog
 export async function getPopularAnime(page = 1, perPage = 12) {
+  try {
+    return await fetchAniListList({ page, perPage, sort: ['POPULARITY_DESC'] });
+  } catch (e) {
+    console.warn('[getPopularAnime] AniList failed:', e?.message);
+  }
+  try {
+    return await fetchJikanList('popular', page, perPage);
+  } catch (e) {
+    console.warn('[getPopularAnime] Jikan failed:', e?.message);
+  }
   try {
     const { items, pagination } = await fetchCatalogRecent(page, perPage);
     return { media: topByScore(items, perPage), pageInfo: toPageInfo(pagination, perPage, page, items.length) };
-  } catch (e) {
-    console.warn('[getPopularAnime] failed:', e?.message);
+  } catch {
     const home = await getHome();
     return sectionToPageInfo(home.trending, perPage, page);
   }
@@ -216,10 +257,19 @@ export async function getPopularAnime(page = 1, perPage = 12) {
 
 export async function getTrendingAnime(page = 1, perPage = 10) {
   try {
+    return await fetchAniListList({ page, perPage, sort: ['TRENDING_DESC'] });
+  } catch (e) {
+    console.warn('[getTrendingAnime] AniList failed:', e?.message);
+  }
+  try {
+    return await fetchJikanList('trending', page, perPage);
+  } catch (e) {
+    console.warn('[getTrendingAnime] Jikan failed:', e?.message);
+  }
+  try {
     const { items, pagination } = await fetchCatalogRecent(page, perPage);
     return { media: topByScore(items, perPage), pageInfo: toPageInfo(pagination, perPage, page, items.length) };
-  } catch (e) {
-    console.warn('[getTrendingAnime] failed:', e?.message);
+  } catch {
     const home = await getHome();
     return sectionToPageInfo(home.trending, perPage, page);
   }
@@ -227,16 +277,35 @@ export async function getTrendingAnime(page = 1, perPage = 10) {
 
 export async function getRecentAnime(page = 1, perPage = 20) {
   try {
+    return await fetchAniListList({ page, perPage, sort: ['UPDATED_AT_DESC'], status: 'RELEASING' });
+  } catch (e) {
+    console.warn('[getRecentAnime] AniList failed:', e?.message);
+  }
+  try {
+    return await fetchJikanList('recent', page, perPage);
+  } catch (e) {
+    console.warn('[getRecentAnime] Jikan failed:', e?.message);
+  }
+  try {
     const { items, pagination } = await fetchCatalogRecent(page, perPage);
     return { media: items, pageInfo: toPageInfo(pagination, perPage, page, items.length) };
-  } catch (e) {
-    console.warn('[getRecentAnime] failed:', e?.message);
+  } catch {
     const home = await getHome();
     return sectionToPageInfo(home.latestEpisodes, perPage, page);
   }
 }
 
 export async function getTopRatedAnime(page = 1, perPage = 12) {
+  try {
+    return await fetchAniListList({ page, perPage, sort: ['SCORE_DESC'], status: 'FINISHED' });
+  } catch (e) {
+    console.warn('[getTopRatedAnime] AniList failed:', e?.message);
+  }
+  try {
+    return await fetchJikanList('top', page, perPage);
+  } catch (e) {
+    console.warn('[getTopRatedAnime] Jikan failed:', e?.message);
+  }
   try {
     // Finished titles are sparse in "recent", so pool a few pages then filter client-side
     const settled = await Promise.allSettled([1, 2, 3, 4].map((p) => fetchCatalogRecent(p, 24)));
@@ -247,8 +316,7 @@ export async function getTopRatedAnime(page = 1, perPage = 12) {
     const finished = pool.filter((a) => (a.status || '').toLowerCase().includes('finish'));
     const list = finished.length ? topByScore(finished, 96) : topByScore(pool, 96);
     return sectionToPageInfo(list, perPage, page);
-  } catch (e) {
-    console.warn('[getTopRatedAnime] failed:', e?.message);
+  } catch {
     const home = await getHome();
     return sectionToPageInfo(home.finishedAir, perPage, page);
   }
@@ -403,6 +471,142 @@ export async function searchAnime(keyword, page = 1, perPage = 20) {
       return empty;
     }
   }
+}
+
+// ============================
+// Listing providers: AniList → Jikan (MAL) → catalog
+// Function declarations hoist, so getHome/adapters above can call them.
+// Cards carry `ani-` / `mal-` ids; Watch already streams every kind.
+// ============================
+
+const HOME_QUERY = `
+query {
+  trending: Page(page: 1, perPage: 12) {
+    media(type: ANIME, sort: TRENDING_DESC, isAdult: false) {
+      ${MEDIA_FIELDS}
+    }
+  }
+  popular: Page(page: 1, perPage: 12) {
+    media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
+      ${MEDIA_FIELDS}
+    }
+  }
+  recent: Page(page: 1, perPage: 24) {
+    media(type: ANIME, status: RELEASING, sort: UPDATED_AT_DESC, isAdult: false) {
+      ${MEDIA_FIELDS}
+    }
+  }
+  finished: Page(page: 1, perPage: 12) {
+    media(type: ANIME, status: FINISHED, sort: SCORE_DESC, isAdult: false) {
+      ${MEDIA_FIELDS}
+    }
+  }
+}`;
+
+function buildListQuery(status) {
+  const statusArg = status ? `, status: ${status}` : '';
+  return `
+query ($page: Int, $perPage: Int, $sort: [MediaSort]) {
+  Page(page: $page, perPage: $perPage) {
+    pageInfo { total perPage currentPage lastPage hasNextPage }
+    media(type: ANIME${statusArg}, sort: $sort, isAdult: false) {
+      ${MEDIA_FIELDS}
+    }
+  }
+}`;
+}
+
+async function fetchAniListList({ page = 1, perPage = 12, sort = ['POPULARITY_DESC'], status = null }) {
+  const data = await post(buildListQuery(status), { page, perPage, sort });
+  const media = (data?.Page?.media || []).map(normalizeAniListMedia).filter(Boolean);
+  const info = data?.Page?.pageInfo || {};
+  return {
+    media,
+    pageInfo: {
+      hasNextPage: !!info.hasNextPage,
+      currentPage: info.currentPage || page,
+      lastPage: info.lastPage || page,
+      total: info.total ?? media.length,
+      perPage,
+    },
+  };
+}
+
+async function fetchAniListHome() {
+  const data = await post(HOME_QUERY, {});
+  const norm = (arr) => (arr || []).map(normalizeAniListMedia).filter(Boolean);
+  const trending = norm(data?.trending?.media);
+  const newReleases = norm(data?.popular?.media);
+  const latestEpisodes = norm(data?.recent?.media);
+  const finishedAir = norm(data?.finished?.media);
+  if (!trending.length && !newReleases.length && !latestEpisodes.length) {
+    throw new Error('AniList home empty');
+  }
+  return { trending, newReleases, latestEpisodes, finishedAir };
+}
+
+const waitMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const JIKAN_LISTS = {
+  trending: (page, perPage) => `${JIKAN_API}/top/anime?filter=bypopularity&page=${page}&limit=${perPage}&sfw=true`,
+  popular: (page, perPage) => `${JIKAN_API}/top/anime?filter=bypopularity&page=${page}&limit=${perPage}&sfw=true`,
+  recent: (page, perPage) => `${JIKAN_API}/top/anime?filter=airing&page=${page}&limit=${perPage}&sfw=true`,
+  new: (page, perPage) => `${JIKAN_API}/seasons/now?page=${page}&limit=${perPage}&sfw=true`,
+  top: (page, perPage) => `${JIKAN_API}/top/anime?page=${page}&limit=${perPage}&sfw=true`,
+};
+
+async function fetchJikan(url) {
+  try {
+    const { data } = await axios.get(url, { timeout: 15000, responseType: 'json' });
+    return data;
+  } catch (e) {
+    if (e?.response?.status === 429) {
+      await waitMs(2500);
+      const { data } = await axios.get(url, { timeout: 15000, responseType: 'json' });
+      return data;
+    }
+    throw e;
+  }
+}
+
+function jikanPageInfo(pg, perPage, page, length) {
+  return {
+    hasNextPage: !!pg?.has_next_page,
+    currentPage: pg?.current_page || page,
+    lastPage: pg?.last_visible_page || page,
+    total: pg?.items?.total ?? length,
+    perPage,
+  };
+}
+
+async function fetchJikanList(key, page = 1, perPage = 12) {
+  const limit = Math.min(Math.max(perPage, 1), 25);
+  const data = await fetchJikan(JIKAN_LISTS[key](page, limit));
+  const media = (data?.data || []).map(normalizeJikanMedia).filter(Boolean);
+  return { media, pageInfo: jikanPageInfo(data?.pagination, perPage, page, media.length) };
+}
+
+async function fetchJikanHome() {
+  const out = { trending: [], newReleases: [], latestEpisodes: [], finishedAir: [] };
+  const jobs = [
+    ['trending', 'trending', 12],
+    ['newReleases', 'new', 12],
+    ['latestEpisodes', 'recent', 24],
+    ['finishedAir', 'top', 12],
+  ];
+  for (const [field, key, n] of jobs) {
+    try {
+      const { media } = await fetchJikanList(key, 1, n);
+      out[field] = media;
+    } catch (e) {
+      console.warn(`[fetchJikanHome] ${key} failed:`, e?.message);
+    }
+    await waitMs(600); // stay under Jikan's 3 req/s limit
+  }
+  if (!out.trending.length && !out.newReleases.length && !out.latestEpisodes.length) {
+    throw new Error('Jikan home empty');
+  }
+  return out;
 }
 
 // ============================

@@ -61,7 +61,7 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-2">
               <Heart size="12" className="text-[var(--accent)] animate-heart-beat" fill="currentColor" />
-              <span className="text-xs text-[var(--text-muted)]/50">Built with love for jimei! 🩷</span>
+              <span className="text-xs text-[var(--text-muted)]/50">Built with love for jimei!</span>
             </div>
           </div>
         </div>

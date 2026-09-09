@@ -100,7 +100,7 @@ export default function Home() {
         {showPopular && popular.length > 0 && (
           <AnimeRow
             title="New Releases"
-            subtitle="Fresh titles from AniKoto — guaranteed streamable"
+            subtitle="Fresh titles — guaranteed streamable"
             linkTo="/search?type=TRENDING"
             linkText="View All"
           >
@@ -115,7 +115,7 @@ export default function Home() {
         {showRecent && recent.length > 0 && (
           <AnimeRow
             title="Latest Episodes"
-            subtitle="Recently updated on AniKoto"
+            subtitle="Recently updated"
             linkTo="/search?type=NEW"
             linkText="View All"
           >

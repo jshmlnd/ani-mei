@@ -9,17 +9,42 @@ export default function LazyImage({ src, alt, className = '', ...props }) {
   useEffect(() => {
     const img = imgRef.current;
     if (!img) return;
+    const load = () => {
+      if (img.dataset.src) {
+        img.src = img.dataset.src;
+      } else {
+        setError(true);
+      }
+    };
+    // No IntersectionObserver (very old browser / SSR / headless quirks) → load immediately
+    if (!('IntersectionObserver' in window)) {
+      load();
+      return;
+    }
+    let done = false;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          img.src = img.dataset.src;
+          done = true;
+          load();
           observer.disconnect();
         }
       },
       { rootMargin: '300px' }
     );
     observer.observe(img);
-    return () => observer.disconnect();
+    // Fallback: if the observer never fires, load anyway so images never stay blank
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true;
+        load();
+        observer.disconnect();
+      }
+    }, 1500);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
   }, []);
 
   return (
@@ -29,6 +54,7 @@ export default function LazyImage({ src, alt, className = '', ...props }) {
           ref={imgRef}
           data-src={src}
           alt={alt}
+          referrerPolicy="no-referrer"
           className={`w-full h-full object-cover transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
           loading="lazy"
           onLoad={() => setLoaded(true)}

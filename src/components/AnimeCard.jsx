@@ -11,17 +11,42 @@ export default function AnimeCard({ anime, className = '' }) {
   useEffect(() => {
     const img = imgRef.current;
     if (!img) return;
+    const load = () => {
+      if (img.dataset.src) {
+        img.src = img.dataset.src;
+      } else {
+        setImageError(true);
+      }
+    };
+    // No IntersectionObserver (very old browser / SSR / headless quirks) → load immediately
+    if (!('IntersectionObserver' in window)) {
+      load();
+      return;
+    }
+    let done = false;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          img.src = img.dataset.src;
+          done = true;
+          load();
           observer.disconnect();
         }
       },
       { rootMargin: '300px' }
     );
     observer.observe(img);
-    return () => observer.disconnect();
+    // Fallback: if the observer never fires, load anyway so cards never stay blank
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true;
+        load();
+        observer.disconnect();
+      }
+    }, 1500);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
   }, []);
 
   const title = getDisplayTitle(anime);
@@ -40,7 +65,8 @@ export default function AnimeCard({ anime, className = '' }) {
             ref={imgRef}
             data-src={coverImage}
             alt={title}
-            className={`w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.06] group-hover:brightness-110 ${
+            referrerPolicy="no-referrer"
+            className={`w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.08] group-hover:brightness-110 ${
               imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             loading="lazy"
