@@ -30,7 +30,7 @@ export default function SubtitleOverlay({ cues, currentTime }) {
       {active.map((cue, ci) => (
         <div
           key={`${cue.start}-${ci}`}
-          className="animate-fade-in rounded-xl bg-black/65 px-4 py-1.5 backdrop-blur-[2px]"
+          className="animate-fade-in rounded-xl bg-black/35 px-4 py-1.5 backdrop-blur-[2px]"
           style={{
             animationDuration: '0.18s',
             textAlign: cue.align === 'left' ? 'left' : cue.align === 'right' ? 'right' : 'center',
@@ -39,10 +39,10 @@ export default function SubtitleOverlay({ cues, currentTime }) {
           {cue.lines.map((line, li) => (
             <div
               key={li}
-              className="text-[clamp(14px,2.4vw,22px)] font-bold leading-snug text-white"
+              className="text-[clamp(14px,2.4vw,22px)] font-bold leading-snug text-[var(--accent)]"
               style={{
                 textShadow:
-                  '0 1px 3px rgba(0,0,0,0.9), 0 0 14px rgba(0,0,0,0.65)',
+                  '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.65)',
               }}
             >
               {renderSegments(line)}

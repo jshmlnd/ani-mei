@@ -133,7 +133,7 @@ export default function Landing() {
           {/* Heading */}
           <h1 className="text-3xl md:text-4xl lg:text-[3.5rem] font-bold text-white text-center mb-4 leading-[1.1] tracking-tight">
             Made for my,{' '}
-            <span className="text-gradient">Jimei</span>
+            <span className="text-gradient animate-pulse">Jimei</span>
           </h1>
           <p className="text-[var(--text-secondary)] text-sm md:text-base text-center max-w-lg mb-10 leading-relaxed">
             Watch thousands of anime episodes in HD with no registration. New episodes added daily.
