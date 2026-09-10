@@ -57,7 +57,7 @@ export default function Footer() {
 
           <div className="mt-10 pt-6 border-t border-[var(--border-subtle)] flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-xs text-[var(--text-muted)]">
-              &copy; 2026 Animei. All rights reserved.
+              &copy; 2026 Animei. All rights reserved. <a href='/hentai' className="text-[var(--accent)] hover:animate-bounce"> 18+ </a>
             </p>
             <div className="flex items-center gap-2">
               <Heart size="12" className="text-[var(--accent)] animate-heart-beat" fill="currentColor" />

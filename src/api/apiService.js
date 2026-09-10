@@ -349,7 +349,7 @@ const SEARCH_QUERY = `
 query ($search: String, $page: Int, $perPage: Int) {
   Page(page: $page, perPage: $perPage) {
     pageInfo { total perPage currentPage lastPage hasNextPage }
-    media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+    media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) {
       ${MEDIA_FIELDS}
     }
   }

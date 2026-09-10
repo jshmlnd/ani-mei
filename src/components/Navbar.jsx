@@ -1,17 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { searchAnime, getDisplayTitle } from '../api/apiService';
+import { searchManhwa } from '../api/manhwaService';
 import animeiLogo from '../assets/animeiV2.png';
-import { Search, Menu, X, Heart } from 'lucide-react';
+import { Search, Menu, X, Heart, BookOpen, Clapperboard } from 'lucide-react';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  const [mangaSuggestions, setMangaSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
+  const requestRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -43,12 +46,25 @@ export default function Navbar() {
   }, []);
 
   const handleSearch = useCallback(async (query) => {
-    if (query.length < 2) { setSuggestions([]); return; }
-    try {
-      const result = await searchAnime(query, 1, 8);
-      setSuggestions(result.media);
-    } catch {
+    const q = query.trim();
+    if (q.length < 2) {
       setSuggestions([]);
+      setMangaSuggestions([]);
+      return;
+    }
+    const reqId = ++requestRef.current;
+    try {
+      const [animeRes, mangaRes] = await Promise.all([
+        searchAnime(q, 1, 5).catch(() => ({ media: [] })),
+        searchManhwa(q).catch(() => ({ items: [] })),
+      ]);
+      if (requestRef.current !== reqId) return;
+      setSuggestions(animeRes?.media || []);
+      setMangaSuggestions((mangaRes?.items || []).slice(0, 5));
+    } catch {
+      if (requestRef.current !== reqId) return;
+      setSuggestions([]);
+      setMangaSuggestions([]);
     }
   }, []);
 
@@ -83,11 +99,12 @@ export default function Navbar() {
     { to: '/browse?type=TRENDING', label: 'New Releases' },
     { to: '/browse?type=NEW', label: 'Latest' },
     { to: '/browse?type=TOP', label: 'Completed' },
+    { to: '/manhwa', label: 'Manhwa' },
   ];
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-350 ${
         isScrolled
           ? 'glass-panel shadow-lg shadow-black/20'
           : 'bg-transparent'
@@ -133,11 +150,11 @@ export default function Navbar() {
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] group-focus-within:text-[var(--accent)] transition-colors duration-300" />
                 <input
                   type="text"
-                  placeholder="Search anime..."
+                  placeholder="Search anime, manga..."
                   className="w-44 lg:w-56 pl-10 pr-10 py-2.5 text-sm bg-white/[0.04] border border-[var(--border-subtle)] rounded-full outline-none text-white placeholder-[var(--text-muted)] focus:border-[var(--accent)]/40 focus:bg-white/[0.06] focus:rounded-full focus:shadow-[0_0_0_4px_rgba(var(--accent-rgb),0.08)] transition-all duration-300"
                   value={searchQuery}
                   onChange={handleSearchChange}
-                  onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
+                  onFocus={() => searchQuery.trim().length >= 2 && setShowSuggestions(true)}
                 />
                 {!searchQuery && (
                   <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] bg-white/[0.06] border border-[var(--border-subtle)] rounded-full pointer-events-none">
@@ -147,36 +164,92 @@ export default function Navbar() {
               </div>
             </form>
 
-            {/* Suggestions */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute top-full right-0 mt-2 w-80 glass-panel rounded-2xl shadow-2xl shadow-black/40 overflow-hidden z-50 animate-slide-in-down" style={{ animationDuration: '0.25s' }}>
-                {suggestions.map((anime) => (
-                  <button
-                    key={anime.id}
-                    className="flex items-center gap-3 w-full p-3 hover:bg-[var(--accent)]/[0.06] cursor-pointer transition-colors text-left border-b border-[var(--border-subtle)] last:border-0"
-                    onClick={() => { setShowSuggestions(false); setSearchQuery(''); navigate(`/anime/${anime.id}`); }}
+            {/* Suggestions — anime + manga/manhwa */}
+            {showSuggestions && (suggestions.length > 0 || mangaSuggestions.length > 0) && (
+              <div className="absolute top-full right-0 mt-2 w-80 max-h-[70vh] overflow-y-auto glass-panel rounded-2xl shadow-2xl shadow-black/40 z-50 animate-slide-in-down" style={{ animationDuration: '0.25s' }}>
+                {suggestions.length > 0 && (
+                  <>
+                    <p className="flex items-center gap-1.5 px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      <Clapperboard className="w-3 h-3" />
+                      Anime
+                    </p>
+                    {suggestions.map((anime) => (
+                      <button
+                        key={anime.id}
+                        className="flex items-center gap-3 w-full p-3 hover:bg-[var(--accent)]/[0.06] cursor-pointer transition-colors text-left border-b border-[var(--border-subtle)] last:border-0"
+                        onClick={() => {
+                          setShowSuggestions(false);
+                          setSearchQuery('');
+                          setMangaSuggestions([]);
+                          navigate(`/anime/${anime.id}`);
+                        }}
+                      >
+                        <img
+                          src={anime.coverImage?.medium || anime.coverImage?.large || anime.poster}
+                          alt=""
+                          className="w-10 h-14 object-cover rounded-xl"
+                          loading="lazy"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{getDisplayTitle(anime)}</p>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            {String(anime.format || anime.type || '').replace('_', ' ')} {anime.episodes && `\u00B7 ${anime.episodes} eps`}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {mangaSuggestions.length > 0 && (
+                  <>
+                    <p className="flex items-center gap-1.5 px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      <BookOpen className="w-3 h-3" />
+                      Manga & Manhwa
+                    </p>
+                    {mangaSuggestions.map((manga) => (
+                      <button
+                        key={manga.id}
+                        className="flex items-center gap-3 w-full p-3 hover:bg-[var(--accent)]/[0.06] cursor-pointer transition-colors text-left border-b border-[var(--border-subtle)] last:border-0"
+                        onClick={() => {
+                          setShowSuggestions(false);
+                          setSearchQuery('');
+                          setSuggestions([]);
+                          navigate(`/manhwa?title=${encodeURIComponent(manga.id)}`);
+                        }}
+                      >
+                        <img
+                          src={manga.thumbnail || manga.image}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-14 object-cover rounded-xl"
+                          loading="lazy"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{manga.title}</p>
+                          <p className="text-xs text-[var(--text-muted)] truncate">
+                            {[manga.type, manga.status, manga.latestChapter].filter(Boolean).join(' · ') || 'Manhwa'}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </>
+                )}
+                <div className="flex border-t border-[var(--border-subtle)]">
+                  <Link
+                    to={`/search?keyw=${encodeURIComponent(searchQuery.trim())}`}
+                    className="flex-1 block p-3 text-center text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/[0.06] transition-colors"
+                    onClick={() => setShowSuggestions(false)}
                   >
-                    <img
-                      src={anime.coverImage?.medium || anime.coverImage?.large || anime.poster}
-                      alt=""
-                      className="w-10 h-14 object-cover rounded-xl"
-                      loading="lazy"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{getDisplayTitle(anime)}</p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {String(anime.format || anime.type || '').replace('_', ' ')} {anime.episodes && `\u00B7 ${anime.episodes} eps`}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-                <Link
-                  to={`/search?keyw=${encodeURIComponent(searchQuery)}`}
-                  className="block p-3 text-center text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/[0.06] border-t border-[var(--border-subtle)] transition-colors"
-                  onClick={() => setShowSuggestions(false)}
-                >
-                  View all results
-                </Link>
+                    Anime results
+                  </Link>
+                  <Link
+                    to={`/search?keyw=${encodeURIComponent(searchQuery.trim())}&tab=manhwa`}
+                    className="flex-1 block p-3 text-center text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/[0.06] border-l border-[var(--border-subtle)] transition-colors"
+                    onClick={() => setShowSuggestions(false)}
+                  >
+                    Manga results
+                  </Link>
+                </div>
               </div>
             )}
           </div>

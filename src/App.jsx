@@ -5,6 +5,9 @@ import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Watch from './pages/Watch';
 import Search from './pages/Search';
+import ManhwaRead from './pages/ManhwaRead';
+import Manhwa from './components/Manhwa';
+import Hentai from './components/Hentai';
 
 import './App.css';
 
@@ -22,6 +25,9 @@ function AppContent() {
           <Route path="/browse/:type" element={<Home />} />
           <Route path="/anime/:id" element={<Watch />} />
           <Route path="/search" element={<Search />} />
+          <Route path="/manhwa/read/:hid/:chapterId" element={<ManhwaRead />} />
+          <Route path="/manhwa" element={<Manhwa />} />
+          <Route path="/hentai" element={<Hentai />} />
 
         </Routes>
       </main>
