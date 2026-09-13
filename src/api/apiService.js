@@ -6,7 +6,7 @@ import axios from 'axios';
 //            /api/stream/mal/:malId/:ep/:track
 // Listings + search: AniList GraphQL first, Jikan (MyAnimeList) fallback,
 // catalog pool as last resort. Cards carry `ani-` / `mal-` / catalog ids.
-const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://animeiapi.joshuaklein-malonda.workers.dev';
+const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://consumet-api-ymrw.onrender.com/';
 
 export const streamApiBase = STREAM_API;
 
