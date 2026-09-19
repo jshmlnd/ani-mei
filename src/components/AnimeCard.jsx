@@ -1,53 +1,11 @@
 import { Link } from 'react-router-dom';
 import { getDisplayTitle } from '../api/apiService';
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { ImageIcon, Star, Play } from 'lucide-react';
 
 export default function AnimeCard({ anime, className = '' }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const imgRef = useRef(null);
-
-  useEffect(() => {
-    const img = imgRef.current;
-    if (!img) return;
-    const load = () => {
-      if (img.dataset.src) {
-        img.src = img.dataset.src;
-      } else {
-        setImageError(true);
-      }
-    };
-    // No IntersectionObserver (very old browser / SSR / headless quirks) → load immediately
-    if (!('IntersectionObserver' in window)) {
-      load();
-      return;
-    }
-    let done = false;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          done = true;
-          load();
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '300px' }
-    );
-    observer.observe(img);
-    // Fallback: if the observer never fires, load anyway so cards never stay blank
-    const timer = setTimeout(() => {
-      if (!done) {
-        done = true;
-        load();
-        observer.disconnect();
-      }
-    }, 1500);
-    return () => {
-      clearTimeout(timer);
-      observer.disconnect();
-    };
-  }, []);
 
   const title = getDisplayTitle(anime);
   const coverImage = anime.coverImage?.large || anime.coverImage?.medium || anime.poster || anime._raw?.poster;
@@ -62,8 +20,7 @@ export default function AnimeCard({ anime, className = '' }) {
       <figure className="relative aspect-[3/4] overflow-hidden">
         {!imageError && (
           <img
-            ref={imgRef}
-            data-src={coverImage}
+            src={coverImage}
             alt={title}
             referrerPolicy="no-referrer"
             className={`w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.08] group-hover:brightness-110 ${

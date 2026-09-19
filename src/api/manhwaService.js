@@ -1,23 +1,19 @@
-import axios from 'axios';
+import { fetchJSON } from './http';
 
 const MANHWA_API = 'https://manhwaapi.joshuaklein-malonda.workers.dev';
-
-export const manhwaApiBase = MANHWA_API;
 
 const TIMEOUT = 15000;
 
 // Retry once with backoff for rate limits and upstream blips. 400/404/410
 // are client-side outcomes — surface them immediately, never retry.
 async function get(path, params = {}, retries = 1) {
+  const qs = new URLSearchParams(params);
+  const q = qs.toString();
+  const url = `${MANHWA_API}${path}${q ? `?${q}` : ''}`;
   try {
-    const { data } = await axios.get(`${MANHWA_API}${path}`, {
-      params,
-      timeout: TIMEOUT,
-      responseType: 'json',
-    });
-    return data;
+    return await fetchJSON(url, { timeout: TIMEOUT });
   } catch (e) {
-    const status = e?.response?.status;
+    const status = e?.status;
     if (retries > 0 && (status === 429 || status === 502 || status === 503 || status === 504)) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       return get(path, params, retries - 1);
@@ -266,7 +262,7 @@ function pickTitleDetail(payload) {
 export function proxiedImage(url) {
   if (!url || typeof url !== 'string') return '';
   if (!/pstatic\.net/i.test(url)) return url;
-  return `${MANHWA_API}/image?url=${encodeURIComponent(url)}`;
+  return `${MANHWA_API}/image?url=${encodeURIComponent(url.replace(/swebtoon-phinf/g, 'webtoon-phinf'))}`;
 }
 
 // Numeric title_no ids belong to Webtoon; MangaDex hids are UUIDs.
@@ -435,9 +431,3 @@ export async function searchManhwa(keyword) {
     resolvedFrom: md?.resolvedFrom ?? q,
   };
 }
-
-// Backwards-compatible stub used by older imports
-export const fetchManhwa = async (query) => {
-  if (query) return getManhwaTitle(query);
-  return getManhwaLatest();
-};

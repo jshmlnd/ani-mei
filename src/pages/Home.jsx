@@ -40,8 +40,7 @@ export default function Home() {
   const [searchParams] = useSearchParams();
   const type = searchParams.get('type');
 
-  const showTrending = !type || type === 'TRENDING';
-  const showPopular = !type || type === 'TRENDING';
+  const showMain = !type || type === 'TRENDING';
   const showRecent = !type || type === 'NEW';
   const showTopRated = !type || type === 'TOP';
 
@@ -58,8 +57,10 @@ export default function Home() {
       try {
         setLoading(true);
         const home = await getHome();
-        if (showTrending) setTrending(home.trending);
-        if (showPopular) setPopular(home.newReleases);
+        if (showMain) {
+          setTrending(home.trending);
+          setPopular(home.newReleases);
+        }
         if (showRecent) setRecent(home.latestEpisodes);
         if (showTopRated) setTopRated(home.finishedAir);
       } catch {
@@ -69,7 +70,7 @@ export default function Home() {
       }
     };
     fetchData();
-  }, [type, showTrending, showPopular, showRecent, showTopRated]);
+  }, [type, showMain, showRecent, showTopRated]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return (
@@ -89,15 +90,8 @@ export default function Home() {
     <div>
       {!type && trending.length > 0 && <HeroCarousel animeList={trending} />}
 
-      {type && (
-        <div className="pt-24 pb-4">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          </div>
-        </div>
-      )}
-
       <div className="space-y-2 pb-8">
-        {showPopular && popular.length > 0 && (
+        {showMain && popular.length > 0 && (
           <AnimeRow
             title="New Releases"
             subtitle="Fresh titles — guaranteed streamable"

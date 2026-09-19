@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getManhwaLatest,
@@ -10,11 +10,11 @@ import {
   chapterLabel,
 } from '../api/manhwaService';
 import LoadingSpinner from './LoadingSpinner';
+import HorizontalRow from './HorizontalRow';
+import Carousel from './Carousel';
 import {
   BookOpen,
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
   AlertCircle,
   ImageIcon,
   Clock,
@@ -29,176 +29,10 @@ const PER_PAGE = 24;
 const SOURCE_DOWN_MSG =
   'The manhwa source is currently unreachable. Loaded titles will appear here once it is back online.';
 
-/* ---------- Horizontal scroll row ---------- */
-function HorizontalRow({ children }) {
-  const scrollRef = useRef(null);
-  const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
-  const anim = useRef({ target: null, raf: null });
-
-  // Animated glide to an absolute scroll position (cancels any in-flight glide)
-  const animateTo = (target, duration = 500) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const max = el.scrollWidth - el.clientWidth;
-    target = Math.min(Math.max(target, 0), Math.max(max, 0));
-    if (anim.current.raf) cancelAnimationFrame(anim.current.raf);
-    anim.current.target = target;
-    const start = el.scrollLeft;
-    const dist = target - start;
-    if (Math.abs(dist) < 1) {
-      anim.current.target = null;
-      anim.current.raf = null;
-      return;
-    }
-    const t0 = performance.now();
-    const tick = (now) => {
-      const t = Math.min((now - t0) / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
-      el.scrollLeft = start + dist * eased;
-      if (t < 1) {
-        anim.current.raf = requestAnimationFrame(tick);
-      } else {
-        anim.current.raf = null;
-        anim.current.target = null;
-      }
-    };
-    anim.current.raf = requestAnimationFrame(tick);
-  };
-
-  const scroll = (dir) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const base = anim.current.target ?? el.scrollLeft;
-    animateTo(base + dir * 400, 500);
-  };
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-
-    const smoothTo = (target) => {
-      animateTo(target, 180);
-    };
-
-    // Vertical wheel -> smooth horizontal glide (lets the page scroll at the ends)
-    const onWheel = (e) => {
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-      const max = el.scrollWidth - el.clientWidth;
-      if (max <= 0) return;
-      if ((e.deltaY > 0 && el.scrollLeft >= max - 1) || (e.deltaY < 0 && el.scrollLeft <= 0))
-        return;
-      e.preventDefault();
-      const base = anim.current.target ?? el.scrollLeft;
-      const next = clamp(base + e.deltaY, 0, max);
-      smoothTo(next);
-    };
-
-    // Mouse drag to scroll
-    const onDown = (e) => {
-      if (anim.current.raf) cancelAnimationFrame(anim.current.raf);
-      anim.current.target = null;
-      drag.current = { down: true, startX: e.pageX, startLeft: el.scrollLeft, moved: false };
-    };
-    const onMove = (e) => {
-      if (!drag.current.down) return;
-      const dx = e.pageX - drag.current.startX;
-      if (Math.abs(dx) > 5) drag.current.moved = true;
-      if (drag.current.moved) el.scrollLeft = drag.current.startLeft - dx;
-    };
-    const onUp = () => {
-      drag.current.down = false;
-    };
-    // Suppress card clicks after a drag
-    const onClickCapture = (e) => {
-      if (drag.current.moved) {
-        e.preventDefault();
-        e.stopPropagation();
-        drag.current.moved = false;
-      }
-    };
-
-    el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('mousedown', onDown);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    el.addEventListener('click', onClickCapture, true);
-    return () => {
-      if (anim.current.raf) cancelAnimationFrame(anim.current.raf);
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('mousedown', onDown);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      el.removeEventListener('click', onClickCapture, true);
-    };
-  }, []);
-
-  return (
-    <div className="relative group/scroll">
-      <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide cursor-grab active:cursor-grabbing select-none">
-        {children}
-      </div>
-      <button
-        type="button"
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-black/90 hover:scale-110"
-        onClick={() => scroll(-1)}
-        aria-label="Scroll left"
-      >
-        <ChevronLeft className="w-5 h-5" />
-      </button>
-      <button
-        type="button"
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-black/90 hover:scale-110"
-        onClick={() => scroll(1)}
-        aria-label="Scroll right"
-      >
-        <ChevronRight className="w-5 h-5" />
-      </button>
-    </div>
-  );
-}
-
 /* ---------- Grid card ---------- */
 export function ManhwaCard({ item, onOpen }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const imgRef = useRef(null);
-
-  useEffect(() => {
-    const img = imgRef.current;
-    if (!img) return;
-    const load = () => {
-      if (img.dataset.src) img.src = img.dataset.src;
-      else setFailed(true);
-    };
-    if (!('IntersectionObserver' in window)) {
-      load();
-      return;
-    }
-    let done = false;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          done = true;
-          load();
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '300px' }
-    );
-    observer.observe(img);
-    const timer = setTimeout(() => {
-      if (!done) {
-        done = true;
-        load();
-        observer.disconnect();
-      }
-    }, 1500);
-    return () => {
-      clearTimeout(timer);
-      observer.disconnect();
-    };
-  }, []);
 
   return (
     <button
@@ -208,8 +42,7 @@ export function ManhwaCard({ item, onOpen }) {
       <figure className="relative aspect-[3/4] overflow-hidden">
         {!failed ? (
           <img
-            ref={imgRef}
-            data-src={item.thumbnail || item.image}
+            src={item.thumbnail || item.image}
             alt={item.title}
             loading="lazy"
             referrerPolicy="no-referrer"
@@ -278,131 +111,67 @@ export function ManhwaCard({ item, onOpen }) {
 
 /* ---------- Trending hero ---------- */
 function TrendingHero({ items, onOpen }) {
-  const [index, setIndex] = useState(0);
-  const count = items.length;
-
-  useEffect(() => {
-    if (count <= 1) return;
-    const t = setInterval(() => setIndex((i) => (i + 1) % count), 8000);
-    return () => clearInterval(t);
-  }, [count]);
-
-  if (!count) return null;
-  const item = items[index % count];
-
   return (
-    <div className="relative w-full h-[62vh] min-h-[440px] max-h-[640px] overflow-hidden">
-      {items.map((m, i) => (
-        <div
-          key={`${m.id}-${i}`}
-          className={`absolute inset-0 transition-opacity duration-1000 ${
-            i === index % count ? 'opacity-100 z-10' : 'opacity-0 z-0'
-          }`}
-        >
-          <img
-            src={m.image}
-            alt=""
-            referrerPolicy="no-referrer"
-            className={`w-full h-full object-cover ${
-              i === index % count ? 'animate-ken-burns' : ''
-            }`}
-            loading={i === 0 ? 'eager' : 'lazy'}
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-[var(--bg-deep)] via-[var(--bg-deep)]/70 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-deep)] via-transparent to-[var(--bg-deep)]/50" />
-          <div className="absolute inset-0 bg-[var(--accent)]/[0.03]" />
-        </div>
-      ))}
-
-      <div className="absolute inset-0 z-20 flex items-center">
-        <div className="max-w-7xl mx-auto px-6 w-full">
-          <div className="max-w-xl" key={item.id}>
-            <div className="flex items-center gap-2 mb-5 animate-fade-in">
-              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-[var(--accent)]/20 text-[var(--accent)] rounded-full border border-[var(--accent)]/25 backdrop-blur-sm">
-                <Sparkles className="w-3 h-3" />
-                Trending Manhwa
-              </span>
-              {item.status && (
-                <span className="px-3 py-1 text-xs font-medium bg-white/[0.08] text-white/60 rounded-full border border-white/[0.1] backdrop-blur-sm">
-                  {item.status}
-                </span>
-              )}
-            </div>
-            <h1
-              className="text-3xl md:text-4xl lg:text-[3rem] font-bold text-white mb-3 leading-[1.1] line-clamp-2 animate-fade-in-up tracking-tight"
-              style={{ animationDelay: '0.15s' }}
-            >
-              {item.title}
-            </h1>
-            {item.altTitle && (
-              <p className="text-base text-[var(--accent)]/60 mb-3 font-medium line-clamp-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
-                {item.altTitle}
-              </p>
-            )}
-            {item.description && (
-              <p
-                className="text-sm text-white/45 mb-6 line-clamp-3 leading-relaxed animate-fade-in-up"
-                style={{ animationDelay: '0.3s' }}
-              >
-                {item.description}
-              </p>
-            )}
-            {item.genres && item.genres.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-6 animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
-                {item.genres.slice(0, 5).map((g) => (
-                  <span
-                    key={g}
-                    className="px-3 py-1 text-xs font-medium bg-[var(--accent)]/[0.08] text-[var(--accent)]/80 rounded-full border border-[var(--accent)]/[0.15] backdrop-blur-sm"
-                  >
-                    {g}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="flex items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-              <button
-                onClick={() => onOpen(item.hid || item.slug || item.id)}
-                className="inline-flex items-center gap-2.5 px-7 py-3.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_30px_rgba(var(--accent-rgb),0.35)] hover:scale-[1.03]"
-              >
-                <BookOpen size="14" />
-                Read Now
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {count > 1 && (
+    <Carousel
+      items={items}
+      interval={8000}
+      imageFor={(m) => m.image}
+      renderContent={(item) => (
         <>
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
-            {items.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setIndex(i)}
-                aria-label={`Go to slide ${i + 1}`}
-                className={`transition-all duration-500 rounded-full ${
-                  i === index % count ? 'w-8 h-2.5 bg-[var(--accent)]' : 'w-2.5 h-2.5 bg-white/20 hover:bg-[var(--accent)]/40'
-                }`}
-              />
-            ))}
+          <div className="flex items-center gap-2 mb-5 animate-fade-in">
+            <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-[var(--accent)]/20 text-[var(--accent)] rounded-full border border-[var(--accent)]/25 backdrop-blur-sm">
+              <Sparkles className="w-3 h-3" />
+              Trending Manhwa
+            </span>
+            {item.status && (
+              <span className="px-3 py-1 text-xs font-medium bg-white/[0.08] text-white/60 rounded-full border border-white/[0.1] backdrop-blur-sm">
+                {item.status}
+              </span>
+            )}
           </div>
-          <button
-            onClick={() => setIndex((index - 1 + count) % count)}
-            aria-label="Previous slide"
-            className="absolute left-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 flex items-center justify-center rounded-full glass-panel-light hover:bg-[var(--accent)]/[0.1] text-white/50 hover:text-[var(--accent)] transition-all duration-300 hover:scale-110"
+          <h1
+            className="text-3xl md:text-4xl lg:text-[3rem] font-bold text-white mb-3 leading-[1.1] line-clamp-2 animate-fade-in-up tracking-tight"
+            style={{ animationDelay: '0.15s' }}
           >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => setIndex((index + 1) % count)}
-            aria-label="Next slide"
-            className="absolute right-5 top-1/2 -translate-y-1/2 z-30 w-11 h-11 flex items-center justify-center rounded-full glass-panel-light hover:bg-[var(--accent)]/[0.1] text-white/50 hover:text-[var(--accent)] transition-all duration-300 hover:scale-110"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
+            {item.title}
+          </h1>
+          {item.altTitle && (
+            <p className="text-base text-[var(--accent)]/60 mb-3 font-medium line-clamp-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+              {item.altTitle}
+            </p>
+          )}
+          {item.description && (
+            <p
+              className="text-sm text-white/45 mb-6 line-clamp-3 leading-relaxed animate-fade-in-up"
+              style={{ animationDelay: '0.3s' }}
+            >
+              {item.description}
+            </p>
+          )}
+          {item.genres && item.genres.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-6 animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+              {item.genres.slice(0, 5).map((g) => (
+                <span
+                  key={g}
+                  className="px-3 py-1 text-xs font-medium bg-[var(--accent)]/[0.08] text-[var(--accent)]/80 rounded-full border border-[var(--accent)]/[0.15] backdrop-blur-sm"
+                >
+                  {g}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+            <button
+              onClick={() => onOpen(item.hid || item.slug || item.id)}
+              className="inline-flex items-center gap-2.5 px-7 py-3.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_30px_rgba(var(--accent-rgb),0.35)] hover:scale-[1.03]"
+            >
+              <BookOpen size="14" />
+              Read Now
+            </button>
+          </div>
         </>
       )}
-    </div>
+    />
   );
 }
 
@@ -413,8 +182,6 @@ export function ManhwaDetail({ id, onBack, onOpen, onReadChapter }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chaptersAsc, setChaptersAsc] = useState([]);
-  const [chaptersPage, setChaptersPage] = useState(1);
-  const [chaptersHasNext, setChaptersHasNext] = useState(false);
   const [chaptersLoading, setChaptersLoading] = useState(false);
 
   useEffect(() => {
@@ -427,12 +194,6 @@ export function ManhwaDetail({ id, onBack, onOpen, onReadChapter }) {
         if (cancelled) return;
         setDetail(d);
         setRecommendations(d.recommendations || []);
-        // Webtoon /wt/title preloads episode list — render instantly
-        if (Array.isArray(d._episodes) && d._episodes.length) {
-          setChaptersAsc(d._episodes);
-          setChaptersPage(1);
-          setChaptersHasNext(false);
-        }
       } catch {
         if (!cancelled) setError(SOURCE_DOWN_MSG);
       } finally {
@@ -448,15 +209,19 @@ export function ManhwaDetail({ id, onBack, onOpen, onReadChapter }) {
   useEffect(() => {
     let cancelled = false;
     const loadChapters = async () => {
-      // Skip refetch when detail already supplied episodes (Webtoon)
-      if (Array.isArray(detail?._episodes) && detail._episodes.length) return;
       try {
         setChaptersLoading(true);
-        const res = await getChaptersForTitle(id, { page: 1, limit: 100, order: 'asc' });
-        if (cancelled) return;
-        setChaptersAsc(res.chapters);
-        setChaptersPage(1);
-        setChaptersHasNext(!!res.pageInfo?.hasNext);
+        let all = [];
+        let page = 1;
+        let hasNext = true;
+        while (hasNext) {
+          const res = await getChaptersForTitle(id, { page, order: 'asc' });
+          if (cancelled) return;
+          all = all.concat(res.chapters);
+          hasNext = !!res.pageInfo?.hasNext;
+          page++;
+          setChaptersAsc([...all]);
+        }
       } catch {
         // chapters stay empty — detail still renders
       } finally {
@@ -468,20 +233,7 @@ export function ManhwaDetail({ id, onBack, onOpen, onReadChapter }) {
     return () => {
       cancelled = true;
     };
-  }, [id, detail]);
-
-  const loadMoreChapters = () => {
-    if (chaptersLoading || !chaptersHasNext) return;
-    setChaptersLoading(true);
-    getChaptersForTitle(id, { page: chaptersPage + 1, limit: 100, order: 'asc' })
-      .then((res) => {
-        setChaptersAsc((prev) => [...prev, ...res.chapters]);
-        setChaptersPage((p) => p + 1);
-        setChaptersHasNext(!!res.pageInfo?.hasNext);
-      })
-      .catch(() => setChaptersHasNext(false))
-      .finally(() => setChaptersLoading(false));
-  };
+  }, [id]);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -649,17 +401,6 @@ export function ManhwaDetail({ id, onBack, onOpen, onReadChapter }) {
                   );
                 })}
               </div>
-              {chaptersHasNext && (
-                <div className="pt-4 text-center">
-                  <button
-                    onClick={loadMoreChapters}
-                    disabled={chaptersLoading}
-                    className="px-6 py-2 bg-[var(--accent)]/10 hover:bg-[var(--accent)]/20 disabled:opacity-50 text-[var(--accent)] font-bold text-xs rounded-full border border-[var(--accent)]/25 transition-all"
-                  >
-                    {chaptersLoading ? 'Loading...' : 'Load older chapters'}
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>

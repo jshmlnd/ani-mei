@@ -1,18 +1,13 @@
-import axios from 'axios';
+import { fetchJSON } from './http';
 
 const HENTAI_API = 'https://hentaiapi.joshuaklein-malonda.workers.dev';
-
-export const hentaiApiBase = HENTAI_API;
 
 const TIMEOUT = 15000;
 
 async function get(path, params = {}) {
-  const { data } = await axios.get(`${HENTAI_API}${path}`, {
-    params,
-    timeout: TIMEOUT,
-    responseType: 'json',
-  });
-  return data;
+  const qs = new URLSearchParams(params);
+  const q = qs.toString();
+  return fetchJSON(`${HENTAI_API}${path}${q ? `?${q}` : ''}`, { timeout: TIMEOUT });
 }
 
 function pickList(data) {
@@ -181,9 +176,3 @@ export async function getHentaiWatch(slug, limit = 5) {
     episodes,
   };
 }
-
-// Backwards-compatible stub used by older imports
-export const fetchHentai = async (query) => {
-  if (query) return searchHentai(query);
-  return getHentaiLatest();
-};

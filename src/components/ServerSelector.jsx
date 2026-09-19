@@ -33,14 +33,13 @@ function orderKeys(keys) {
 
 export default function ServerSelector({
   servers = {},
-  flat = [],
   selected,
   onSelect,
   loading = false,
   error = null,
 }) {
-  const hasServers = flat.length > 0 || Object.keys(servers).length > 0;
   const serverKeys = orderKeys(Object.keys(servers || {}));
+  const hasServers = serverKeys.length > 0;
 
   if (loading) {
     return (
@@ -69,78 +68,50 @@ export default function ServerSelector({
     );
   }
 
-  const isGrouped = serverKeys.length > 0;
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Server className="w-3.5 h-3.5 text-[var(--accent)]" />
         <span className="text-xs font-bold tracking-widest text-white uppercase">Servers</span>
-        {flat.length > 0 && (
-          <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--accent)]/[0.08] text-[var(--accent)] border border-[var(--accent)]/[0.15]">
-            {flat.length} available
-          </span>
-        )}
       </div>
 
-      {isGrouped ? (
-        <div className="space-y-3">
-          {serverKeys.map((type) => {
-            const list = servers[type] || [];
-            if (!Array.isArray(list) || list.length === 0) return null;
-            const TypeIcon = TYPE_ICONS[type.toLowerCase()] || Server;
-            return (
-              <div key={type} className="space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <TypeIcon className="w-3 h-3 text-[var(--text-muted)]" />
-                  <span className="text-[10px] font-bold tracking-widest text-[var(--text-muted)] uppercase">
-                    {formatType(type)}
-                  </span>
-                  <span className="text-[10px] text-[var(--text-muted)]/50">• {list.length}</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {list.map((srv, i) => {
-                    const isActive = (selected?.linkId && selected?.linkId === srv.linkId) || (selected?.id && selected?.id === srv.id);
-                    return (
-                      <button
-                        key={srv.linkId || srv.id || `${srv.name}-${type}-${i}`}
-                        onClick={() => onSelect(srv)}
-                        className={`px-3.5 py-1.5 text-xs font-semibold cursor-pointer rounded-full border transition-all duration-200 ${
-                          isActive
-                            ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
-                            : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white hover:border-[var(--accent)]/[0.2]'
-                        }`}
-                        title={`${srv.name} (${type})`}
-                      >
-                        {srv.name}
-                      </button>
-                    );
-                  })}
-                </div>
+      <div className="space-y-3">
+        {serverKeys.map((type) => {
+          const list = servers[type] || [];
+          if (!Array.isArray(list) || list.length === 0) return null;
+          const TypeIcon = TYPE_ICONS[type.toLowerCase()] || Server;
+          return (
+            <div key={type} className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <TypeIcon className="w-3 h-3 text-[var(--text-muted)]" />
+                <span className="text-[10px] font-bold tracking-widest text-[var(--text-muted)] uppercase">
+                  {formatType(type)}
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]/50">• {list.length}</span>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {flat.map((srv, i) => {
-            const isActive = (selected?.linkId && selected?.linkId === srv.linkId) || (selected?.id && selected?.id === srv.id);
-            return (
-              <button
-                key={srv.linkId || srv.id || `${srv.name}-${srv.type}-${i}`}
-                onClick={() => onSelect(srv)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ${
-                  isActive
-                    ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
-                    : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white'
-                }`}
-              >
-                {srv.name} <span className="opacity-60 ml-1 text-[10px]">{srv.type?.toUpperCase()}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+              <div className="flex flex-wrap gap-1.5">
+                {list.map((srv, i) => {
+                  const isActive = (selected?.linkId && selected?.linkId === srv.linkId) || (selected?.id && selected?.id === srv.id);
+                  return (
+                    <button
+                      key={srv.linkId || srv.id || `${srv.name}-${type}-${i}`}
+                      onClick={() => onSelect(srv)}
+                      className={`px-3.5 py-1.5 text-xs font-semibold cursor-pointer rounded-full border transition-all duration-200 ${
+                        isActive
+                          ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
+                          : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white hover:border-[var(--accent)]/[0.2]'
+                      }`}
+                      title={`${srv.name} (${type})`}
+                    >
+                      {srv.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {selected && (
         <div className="flex items-center gap-1.5 pt-2 border-t border-[var(--border-subtle)] mt-3">

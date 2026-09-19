@@ -31,19 +31,13 @@ function langCodeFor(sub) {
 const CUE_LIFT_CONTROLS_VISIBLE = 128;
 const CUE_LIFT_CONTROLS_HIDDEN = 112;
 
-export default function VideoPlayer({ 
-  src, 
-  headers = {}, 
-  poster, 
-  title, 
-  fallbackSrc, 
-  iframeHtml, 
-  skipData,
-  sourceInfo,
+export default function VideoPlayer({
+  src,
+  poster,
+  title,
   extSubtitles = [],
   intro = null,
   outro = null,
-  onIframeError 
 }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -80,7 +74,6 @@ export default function VideoPlayer({
   const [doubleTapSide, setDoubleTapSide] = useState(null);
   const hideControlsTimer = useRef(null);
   const containerRef = useRef(null);
-  const headersRef = useRef(headers);
   const hlsStartedRef = useRef(false);
   const hlsTimeoutRef = useRef(null);
   const hlsRetryRef = useRef(0);
@@ -102,78 +95,11 @@ export default function VideoPlayer({
     showControlsRef.current = showControls;
   }, [showControls]);
 
-  useEffect(() => {
-    headersRef.current = headers;
-  }, [headers]);
-
-  // Check if we have iframe HTML from worker (PRIMARY mode)
-  const hasIframeHtml = iframeHtml && iframeHtml.includes('<iframe');
-  const [iframeFailed, setIframeFailed] = useState(false);
-
-  // Reset iframeFailed when iframeHtml changes (new server/episode selected)
-  useEffect(() => {
-    setIframeFailed(false);
-    setIframeLoaded(false);
-  }, [iframeHtml]);
-
-  // Parse iframe HTML to extract src and attributes
-  const parseIframeHtml = useCallback((html) => {
-    if (!html) return { src: '', attrs: {} };
-    const match = html.match(/<iframe\s+([^>]+)>/i);
-    if (!match) return { src: '', attrs: {} };
-    const attrStr = match[1];
-    const attrs = {};
-    const attrRegex = /(\w+)=["']([^"']*)["']/g;
-    let attrMatch;
-    while ((attrMatch = attrRegex.exec(attrStr)) !== null) {
-      attrs[attrMatch[1]] = attrMatch[2];
-    }
-    return { src: attrs.src || '', attrs };
-  }, []);
-
-  const isIOS = typeof navigator !== 'undefined'
-    && (/iPad|iPhone|iPod/.test(navigator.userAgent)
-      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-  const isEchoEmbed = iframeHtml?.includes('echovideo') || iframeHtml?.includes('/embed-') || src?.includes('echovideo') || src?.includes('/embed-');
-  const blockEchoOnIOS = isIOS && isEchoEmbed;
-
-  // Check if provider is known to block embedding (echovideo, etc.)
-  const providerDomain = sourceInfo?.domain || '';
-  const isProblematicProvider = ['echovideo', 'play.echovideo', 'myvidplay'].some(d => 
-    providerDomain.includes(d) || iframeHtml?.includes(d) || fallbackSrc?.includes(d)
-  );
-
-  // Fallback from iframe to m3u8 when iframe fails (CSP, 403, etc.)
-  const handleIframeError = useCallback(() => {
-    if (fallbackSrc && !iframeFailed) {
-      setIframeFailed(true);
-      onIframeError?.();
-    }
-  }, [fallbackSrc, iframeFailed, onIframeError]);
-
-  // Iframe load timeout - fallback to m3u8 if iframe doesn't load in 10 seconds
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  useEffect(() => {
-    if (!hasIframeHtml || iframeFailed || iframeLoaded || isProblematicProvider) return;
-    const timer = setTimeout(() => {
-      if (!iframeLoaded && !iframeFailed && fallbackSrc) {
-        setIframeFailed(true);
-        onIframeError?.();
-      }
-    }, 10000);
-    return () => clearTimeout(timer);
-  }, [hasIframeHtml, iframeFailed, iframeLoaded, fallbackSrc, onIframeError, isProblematicProvider]);
-
-  const getProxyUrl = useCallback((targetUrl) => {
-    // Only proxy actual m3u8 segment URLs, NOT embed pages
-    const isM3u8Segment = targetUrl && (targetUrl.includes('.m3u8') || targetUrl.includes('/m3u8') || targetUrl.includes('hls'))
-      && !targetUrl.includes('embed') && !targetUrl.includes('echovideo') && !targetUrl.includes('myvidplay');
-    
-    if (!isM3u8Segment) return targetUrl; // Return raw URL for embed pages
-    
-    // No proxy available - use direct URL (segments may fail if CDN blocks browser IPs)
-    return targetUrl;
-  }, []);
+  // HLS source contract: `src` is either the Worker-proxied m3u8 URL
+  // (https://aniko-backend.rk18109ry.workers.dev/api/proxy/m3u8?token=...,
+  // supplied by getEpisodeStream) so .ts segments flow through the Worker,
+  // or a direct CDN m3u8. Either way the browser loads it as-is — there is
+  // no other proxy layer. Embed pages are never passed here.
 
   // Show only our own <track> element at activeExtIndex (-1 = hide all).
   // Uses el.track so HLS-managed TextTracks are never touched by index.
@@ -254,28 +180,6 @@ export default function VideoPlayer({
     })();
   }, [extSubtitles, failedSubs]);
 
-  // Apply skipData (subtitles/quality) from API if available
-  const skipDataAppliedRef = useRef(false);
-  
-  useEffect(() => {
-    if (skipDataAppliedRef.current) return;
-    if (skipData?.subtitles?.length) {
-      const subs = skipData.subtitles.map((track, index) => ({
-        index,
-        lang: track.lang || 'und',
-        name: track.name || track.lang || `Track ${index + 1}`,
-        default: !!track.default,
-      }));
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSubtitles(subs);
-      const defaultIdx = subs.findIndex(s => s.default);
-      if (defaultIdx >= 0) {
-        setSelectedSubtitle(defaultIdx);
-      }
-      skipDataAppliedRef.current = true;
-    }
-  }, [skipData]);
-
   // On load, keep ALL native external cues hidden (the custom overlay renders
   // them instead) and kick off fetching+parsing for the initial track.
   // HLS manifest tracks are untouched and keep rendering natively.
@@ -304,16 +208,11 @@ export default function VideoPlayer({
   }, [src, extSubtitles.length, verifyTrack, ensureParsedCues]);
 
 const initHls = useCallback(() => {
-    // If we have iframe HTML and it hasn't failed and it's not a problematic provider, don't initialize HLS
-    if (hasIframeHtml && !iframeFailed && !isProblematicProvider) return;
-    
     const video = videoRef.current;
-    
-    // When iframe fails, ONLY use m3u8 URL (src) - never fallbackSrc (embed URL)
-    const hlsSrc = iframeFailed ? src : src;
+
     if (!video) return;
-    
-    if (!hlsSrc) {
+
+    if (!src) {
       setError('No HLS stream available for this server — try a different server');
       setIsLoading(false);
       return;
@@ -324,10 +223,7 @@ const initHls = useCallback(() => {
     }
     hlsStartedRef.current = false;
 
-    const isHlsSrc = hlsSrc && (hlsSrc.includes('.m3u8') || hlsSrc.includes('/m3u8') || hlsSrc.includes('hls'))
-      && !hlsSrc.includes('embed') && !hlsSrc.includes('echovideo') && !hlsSrc.includes('myvidplay');
-    
-    console.log('[VideoPlayer] initHls:', { hlsSrc, isHlsSrc, iframeFailed, hasIframeHtml });
+    const isHlsSrc = src.includes('.m3u8') || src.includes('/m3u8') || src.includes('hls');
 
     if (!isHlsSrc) {
       setError('Stream format not supported on this server — try a different server');
@@ -354,8 +250,8 @@ const initHls = useCallback(() => {
       });
       hlsRef.current = hls;
 
-      const proxiedUrl = getProxyUrl(hlsSrc);
-      hls.loadSource(proxiedUrl);
+      const playUrl = src; // already the Worker-proxied m3u8 when available
+      hls.loadSource(playUrl);
       try {
         hls.attachMedia(video);
       } catch (err) {
@@ -473,7 +369,7 @@ const initHls = useCallback(() => {
       setError('Your browser does not support HLS video playback');
       setIsLoading(false);
     }
-  }, [src, hasIframeHtml, iframeFailed, isProblematicProvider, getProxyUrl]);
+  }, [src]);
 
   useEffect(() => {
     const t = setTimeout(initHls, 0);
@@ -492,7 +388,7 @@ const initHls = useCallback(() => {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || hasIframeHtml || iframeFailed) return;
+    if (!video) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -541,7 +437,7 @@ const initHls = useCallback(() => {
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('error', onError);
     };
-  }, [src, fallbackSrc, hasIframeHtml, iframeFailed]);
+  }, [src]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -753,7 +649,7 @@ const initHls = useCallback(() => {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || hasIframeHtml || iframeFailed) return;
+    if (!video) return;
     const onEnterPip = () => setIsPip(true);
     const onLeavePip = () => setIsPip(false);
     video.addEventListener('enterpictureinpicture', onEnterPip);
@@ -762,23 +658,22 @@ const initHls = useCallback(() => {
       video.removeEventListener('enterpictureinpicture', onEnterPip);
       video.removeEventListener('leavepictureinpicture', onLeavePip);
     };
-  }, [hasIframeHtml, iframeFailed]);
+  }, []);
 
   // Keep native cues above the custom control bar.
   // Chromium/Safari: handled purely by CSS
   // (::-webkit-media-text-track-display + --cue-lift, see index.css).
   // Firefox (Gecko) has no CSS hook for cue position, so shift
   // default-positioned VTTCues via `line` instead.
-  const shiftedCuesRef = useRef(null);
-  if (!shiftedCuesRef.current) shiftedCuesRef.current = new WeakSet();
+  const [shiftedCues] = useState(() => new WeakSet());
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || hasIframeHtml || iframeFailed) return;
+    if (!video) return;
     if (typeof VTTCue === 'undefined') return;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
     const isGecko = /\bFirefox\/\d/i.test(ua);
     if (!isGecko) return; // CSS handles it — avoid a double offset
-    const shifted = shiftedCuesRef.current;
+    const shifted = shiftedCues;
 
     const liftPx = showControls ? CUE_LIFT_CONTROLS_VISIBLE : CUE_LIFT_CONTROLS_HIDDEN;
     const applyToTrack = (track) => {
@@ -846,7 +741,7 @@ const initHls = useCallback(() => {
         } catch { /* ignore */ }
       }
     };
-  }, [showControls, selectedSubtitle, subtitles, extSubtitles.length, hasIframeHtml, iframeFailed]);
+  }, [showControls, selectedSubtitle, subtitles, extSubtitles.length, shiftedCues]);
 
   // Single source of truth for auto-hiding: (re)starts the 3s timer that
   // hides the controls while playing. Works on both desktop (no mousemove)
@@ -870,7 +765,6 @@ const initHls = useCallback(() => {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowControls(true);
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowControls(true);
       scheduleAutoHide();
     }
@@ -896,7 +790,6 @@ const initHls = useCallback(() => {
   }, [scheduleAutoHide]);
 
   const handleVideoTouchEnd = useCallback((e) => {
-    if (hasIframeHtml || iframeFailed) return;
     // Don't let this touch also toggle playback via the synthetic click.
     lastVideoTouchRef.current = Date.now();
     const touch = e.changedTouches?.[0];
@@ -946,16 +839,15 @@ const initHls = useCallback(() => {
         toggleControls();
       }, 350);
     }
-  }, [hasIframeHtml, iframeFailed, toggleControls, scheduleAutoHide]);
+  }, [toggleControls, scheduleAutoHide]);
 
   // Taps on the letterboxed container area outside the <video> (visible in
   // fullscreen with object-contain) should behave like middle taps.
   const handleContainerTouchEnd = useCallback((e) => {
-    if (hasIframeHtml || iframeFailed) return;
     if (e.target.closest('button, input, a, [role="menu"], video')) return;
     lastVideoTouchRef.current = Date.now();
     toggleControls();
-  }, [hasIframeHtml, iframeFailed, toggleControls]);
+  }, [toggleControls]);
 
   const handleVideoClick = useCallback((e) => {
     // Ignore the synthetic click that follows a touch — that gesture
@@ -968,7 +860,6 @@ const initHls = useCallback(() => {
   }, [togglePlay]);
 
   useEffect(() => {
-    if (hasIframeHtml || iframeFailed) return;
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT') return;
       switch (e.key) {
@@ -986,7 +877,7 @@ const initHls = useCallback(() => {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleFullscreen, toggleMute, skip, cyclePlaybackRate, togglePip, subtitles, extSubtitles, toggleSubtitlesQuick, subOptions, hasIframeHtml, iframeFailed]);
+  }, [togglePlay, toggleFullscreen, toggleMute, skip, cyclePlaybackRate, togglePip, subtitles, extSubtitles, toggleSubtitlesQuick, subOptions]);
 
   // Close speed menu on outside click
   useEffect(() => {
@@ -1031,50 +922,6 @@ const initHls = useCallback(() => {
 
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
-
-  // For problematic providers (echovideo, etc.), prefer m3u8 directly
-  if (hasIframeHtml && !iframeFailed && !isProblematicProvider) {
-    if (blockEchoOnIOS) {
-      return (
-        <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
-          <div className="text-center px-6">
-            <AlertTriangle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
-            <p className="text-white font-semibold">This stream is not available on iOS</p>
-            <p className="text-sm text-gray-400 mt-1">The provider only offers a web player that iOS cannot run. Try another episode or title.</p>
-          </div>
-        </div>
-      );
-    }
-    const { src: iframeSrc } = parseIframeHtml(iframeHtml);
-    return (
-      <div className="relative bg-black rounded-lg overflow-hidden aspect-video" ref={containerRef}>
-        {title && (
-          <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent">
-            <h2 className="text-white text-lg font-semibold">{title}</h2>
-          </div>
-        )}
-        <iframe
-          src={iframeSrc}
-          allow="autoplay; fullscreen"
-          allowFullScreen="yes"
-          frameBorder="no"
-          scrolling="no"
-          style={{ width: '100%', height: '100%', overflow: 'hidden', border: 'none' }}
-          referrerPolicy="no-referrer"
-          onLoad={() => {
-            setIsLoading(false);
-            setIframeLoaded(true);
-          }}
-          onError={handleIframeError}
-        />
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="w-10 h-10 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
-          </div>
-        )}
-      </div>
-    );
-  }
 
   // Custom subtitle overlay: parsed cues for the selected external track.
   // HLS-manifest tracks keep rendering natively (untouched, per design).

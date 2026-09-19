@@ -75,7 +75,6 @@ export default function Watch() {
     }
     return groups;
   }, [availableTracks]);
-  const flatServers = useMemo(() => Object.values(servers).flat(), [servers]);
   const selectedServer = servers[effectiveTrack]?.[0] || null;
 
   // ---- Stream ----
@@ -197,10 +196,6 @@ export default function Watch() {
                 <VideoPlayer
                   key={`${anime.id}-${episode}-${effectiveTrack}`}
                   src={stream.m3u8}
-                  headers={{}}
-                  iframeHtml=""
-                  skipData={null}
-                  sourceInfo={stream.sourceInfo}
                   extSubtitles={stream.subtitles}
                   intro={stream.intro}
                   outro={stream.outro}
@@ -234,7 +229,6 @@ export default function Watch() {
             <div className="glass-panel rounded-2xl p-5">
               <ServerSelector
                 servers={servers}
-                flat={flatServers}
                 selected={selectedServer}
                 onSelect={(srv) => {
                   if (srv?.track) setTrack(srv.track);

@@ -22,7 +22,6 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/browse" element={<Home />} />
-          <Route path="/browse/:type" element={<Home />} />
           <Route path="/anime/:id" element={<Watch />} />
           <Route path="/search" element={<Search />} />
           <Route path="/manhwa/read/:hid/:chapterId" element={<ManhwaRead />} />

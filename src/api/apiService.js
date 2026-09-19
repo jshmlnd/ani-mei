@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { fetchJSON } from './http';
 
 // Aniko Backend v2.0 — https://aniko-backend.rk18109ry.workers.dev
 //   Catalog : /api/catalog/recent?page=&per_page=  /api/catalog/series/:id
@@ -6,9 +6,7 @@ import axios from 'axios';
 //            /api/stream/mal/:malId/:ep/:track
 // Listings + search: AniList GraphQL first, Jikan (MyAnimeList) fallback,
 // catalog pool as last resort. Cards carry `ani-` / `mal-` / catalog ids.
-const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://consumet-api-ymrw.onrender.com/';
-
-export const streamApiBase = STREAM_API;
+const STREAM_API = import.meta.env.VITE_STREAM_API_BASE || 'https://aniko-backend.rk18109ry.workers.dev';
 
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
@@ -16,11 +14,11 @@ const RETRY_STATUS_CODES = [408, 429, 500, 502, 503, 504];
 
 async function fetchWithRetry(url, options = {}, retries = MAX_RETRIES) {
   try {
-    const response = await axios.get(url, options);
-    return response;
+    const data = await fetchJSON(url, options);
+    return { data };
   } catch (error) {
-    const status = error?.response?.status;
-    const isRetryable = RETRY_STATUS_CODES.includes(status) || !error?.response;
+    const status = error?.status;
+    const isRetryable = RETRY_STATUS_CODES.includes(status) || !status || error?.name === 'AbortError';
     if (isRetryable && retries > 0) {
       console.warn(`[fetchWithRetry] Request failed (${status || 'network error'}), retrying... (${retries} left)`, url);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
@@ -80,9 +78,7 @@ export function normalizeCatalogItem(raw) {
     status: raw.status || null,
     episodes: toInt(raw.episodes),
     genres: Array.isArray(genres) ? genres : [],
-    genresRaw: genres,
     averageScore: score,
-    score: raw.score ?? null,
     description: raw.description || '',
     synopsis: raw.description || '',
     aired: raw.aired || '',
@@ -381,16 +377,19 @@ query ($id: Int) {
 
 async function post(query, variables) {
   try {
-    const { data } = await axios.post(ANILIST_API, { query, variables });
+    const data = await fetchJSON(ANILIST_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables }),
+      timeout: 20000,
+    });
     if (data.errors) {
       console.error('AniList GraphQL errors:', data.errors);
       throw new Error(data.errors[0]?.message || 'GraphQL error');
     }
     return data.data;
   } catch (err) {
-    if (err.response?.data) {
-      console.error('AniList HTTP error:', err.response.status, JSON.stringify(err.response.data));
-    }
+    if (err?.status) console.error('AniList HTTP error:', err.status, err.message);
     throw err;
   }
 }
@@ -418,9 +417,7 @@ export function normalizeAniListMedia(m) {
     status: m.status || null,
     episodes: typeof m.episodes === 'number' ? m.episodes : null,
     genres: m.genres || [],
-    genresRaw: m.genres || [],
     averageScore: m.averageScore ?? null,
-    score: m.averageScore != null ? (m.averageScore / 10).toFixed(1) : null,
     description: m.description || '',
     synopsis: m.description || '',
     season: m.season || null,
@@ -557,13 +554,11 @@ const JIKAN_LISTS = {
 
 async function fetchJikan(url) {
   try {
-    const { data } = await axios.get(url, { timeout: 15000, responseType: 'json' });
-    return data;
+    return await fetchJSON(url, { timeout: 15000 });
   } catch (e) {
-    if (e?.response?.status === 429) {
+    if (e?.status === 429) {
       await waitMs(2500);
-      const { data } = await axios.get(url, { timeout: 15000, responseType: 'json' });
-      return data;
+      return fetchJSON(url, { timeout: 15000 });
     }
     throw e;
   }
@@ -643,9 +638,7 @@ export function normalizeJikanMedia(m) {
     status: m.status || null,
     episodes: typeof m.episodes === 'number' ? m.episodes : null,
     genres,
-    genresRaw: genres,
     averageScore: score,
-    score: m.score ?? null,
     description: m.synopsis || '',
     synopsis: m.synopsis || '',
     aired: typeof m.aired?.string === 'string' ? m.aired.string : '',
@@ -826,11 +819,6 @@ export async function getEpisodeStream({ catalogEpId = null, aniId = null, malId
       domain: (() => { try { return new URL(data.stream_url || '').hostname; } catch { return ''; } })(),
     },
   };
-}
-
-export function proxyVtt(url) {
-  if (!url) return '';
-  return `${STREAM_API}/api/proxy/vtt?url=${encodeURIComponent(url)}`;
 }
 
 // ============================
