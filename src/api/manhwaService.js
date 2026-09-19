@@ -254,51 +254,49 @@ function pickTitleDetail(payload) {
   return payload;
 }
 
-// ---------- LINE Webtoon source (webtoon-phinf.pstatic.net) ----------
-// pstatic.net 403s browsers that send a foreign Referer, so covers are
-// rewritten to the worker's same-domain /image proxy and /wt/pages is
-// ALWAYS called with proxy=1 (worker rewrites pages to /image URLs).
+// ---------- Violet Scans source (violetscans.org) ----------
+// Covers are rewritten to the worker's same-domain /image proxy (allowlisted,
+// edge-cached); chapter pages already come back proxied from /pages?proxy=1.
 
 export function proxiedImage(url) {
   if (!url || typeof url !== 'string') return '';
-  if (!/pstatic\.net/i.test(url)) return url;
-  return `${MANHWA_API}/image?url=${encodeURIComponent(url.replace(/swebtoon-phinf/g, 'webtoon-phinf'))}`;
+  if (!/violetscans\.org/i.test(url)) return url;
+  return `${MANHWA_API}/image?url=${encodeURIComponent(url)}`;
 }
 
-// Numeric title_no ids belong to Webtoon; MangaDex hids are UUIDs.
-export function isWebtoonId(id) {
-  return /^\d+$/.test(String(id ?? '').trim());
+// Violet Scans title ids are slugs, namespaced "vs-<slug>" so they can't clash
+// with MangaDex UUIDs or bare numeric chapter numbers.
+export function isVioletId(id) {
+  return /^vs-/i.test(String(id ?? '').trim());
 }
 
-// Webtoon episode ids look like "2135:7" (title_no:episode_no).
-export function isWebtoonChapterId(id) {
-  return /^\d+:\d+$/.test(String(id ?? '').trim());
+// Violet Scans chapter ids are "<slug>:<number>" tokens (as /chapters and
+// /vs/chapters return them) — the worker routes them straight to Violet Scans.
+export function isVioletChapterId(id) {
+  return /^[a-z0-9][a-z0-9-]*:\d+(\.\d+)?$/i.test(String(id ?? '').trim());
 }
 
-export function normalizeWebtoonItem(raw) {
+export function normalizeVioletItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  const id = raw.hid ?? raw.id ?? raw.title_no ?? raw.titleNo;
-  if (id == null || id === '') return null;
-  const title = raw.title ?? raw.titleText ?? 'Unknown Title';
-  const poster = proxiedImage(raw.poster ?? raw.cover ?? raw.image ?? raw.thumbnail ?? '');
+  const slug = raw.slug ?? raw.hid ?? raw.id;
+  if (slug == null || slug === '') return null;
+  const poster = proxiedImage(raw.poster ?? raw.cover ?? raw.image ?? '');
   return {
-    id: `wt-${id}`,
-    hid: String(id),
-    slug: null,
-    title: String(title).split(' like')[0].trim() || String(title),
+    id: `vs-${slug}`,
+    hid: `vs-${slug}`,
+    slug: String(slug),
+    title: String(raw.title ?? 'Unknown Title'),
     altTitle: '',
     image: poster,
     thumbnail: poster,
-    source: 'webtoon',
+    source: 'violetscans',
     status: raw.status ?? '',
     type: raw.type ?? 'Manhwa',
-    genres: Array.isArray(raw.genres)
-      ? raw.genres.map((g) => (typeof g === 'string' ? g : g?.name)).filter(Boolean)
-      : [],
+    genres: [],
     latestChapter: '',
     updatedAt: '',
     year: null,
-    authors: Array.isArray(raw.authors) ? raw.authors.filter(Boolean) : [],
+    authors: [],
     artists: [],
     rating: null,
     description: raw.synopsis ?? raw.description ?? '',
@@ -307,40 +305,16 @@ export function normalizeWebtoonItem(raw) {
   };
 }
 
-export async function searchWebtoon(keyword, limit = 10) {
+export async function searchViolet(keyword, limit = 10) {
   const q = (keyword || '').trim();
   if (!q) return [];
   try {
-    const data = await get('/wt/search', { q });
+    const data = await get('/vs/search', { q });
     const items = pickList(data?.data?.items ?? data?.data);
-    return items.map(normalizeWebtoonItem).filter(Boolean).slice(0, limit);
+    return items.map(normalizeVioletItem).filter(Boolean).slice(0, limit);
   } catch {
     return [];
   }
-}
-
-export async function getWebtoonTitle(hid) {
-  const id = String(hid ?? '').replace(/^wt-/, '');
-  if (!id) throw new Error('Missing title id');
-  const data = await get('/wt/title', { hid: id });
-  const d = data?.data ?? data;
-  if (!d || typeof d !== 'object' || !d.title) throw new Error('Title not found');
-  const normalized = normalizeWebtoonItem(d);
-  if (!normalized) throw new Error('Title not found');
-  const episodes = Array.isArray(d.episodes) ? d.episodes : [];
-  return {
-    ...normalized,
-    description: d.synopsis ?? normalized.description,
-    url: d.url ?? '',
-    // Preloaded first page of episodes so detail can render instantly.
-    // Sorted oldest-first to match the MangaDex asc convention used by
-    // the detail list and reader prev/next navigation.
-    _episodes: episodes.map(normalizeChapter).filter(Boolean).sort(chapterAsc),
-    recommendations: [],
-    exactMatch: null,
-    resolvedFrom: null,
-    matchCount: null,
-  };
 }
 
 function chapterAsc(a, b) {
@@ -350,10 +324,32 @@ function chapterAsc(a, b) {
   return na - nb;
 }
 
-export async function getWebtoonChapters(hid, { page = 1 } = {}) {
-  const id = String(hid ?? '').replace(/^wt-/, '');
-  if (!id) throw new Error('Missing title id');
-  const data = await get('/wt/chapters', { hid: id, page });
+export async function getVioletTitle(hid) {
+  const slug = String(hid ?? '').replace(/^vs-/, '');
+  if (!slug) throw new Error('Missing title id');
+  const data = await get('/vs/title', { slug });
+  const d = data?.data ?? data;
+  if (!d || typeof d !== 'object' || !d.title) throw new Error('Title not found');
+  const normalized = normalizeVioletItem(d);
+  if (!normalized) throw new Error('Title not found');
+  const chapters = Array.isArray(d.chapters) ? d.chapters : [];
+  return {
+    ...normalized,
+    description: d.synopsis ?? normalized.description,
+    url: d.url ?? '',
+    // Preloaded chapters so the detail view can render its list immediately.
+    _episodes: chapters.map(normalizeChapter).filter(Boolean).sort(chapterAsc),
+    recommendations: [],
+    exactMatch: null,
+    resolvedFrom: null,
+    matchCount: null,
+  };
+}
+
+export async function getVioletChapters(hid, { page = 1 } = {}) {
+  const slug = String(hid ?? '').replace(/^vs-/, '');
+  if (!slug) throw new Error('Missing title id');
+  const data = await get('/vs/chapters', { slug });
   const payload = data?.data ?? data;
   const meta = payload?.meta ?? {};
   const chapters = pickList(payload?.items ?? payload)
@@ -363,67 +359,58 @@ export async function getWebtoonChapters(hid, { page = 1 } = {}) {
   return {
     chapters,
     pageInfo: {
-      hasNext: !!meta.hasNext,
-      total: meta.count ?? meta.total ?? chapters.length,
-      page: meta.page ?? page,
+      hasNext: false, // /vs/chapters returns the full list in one response
+      total: meta.total ?? chapters.length,
+      page,
     },
   };
 }
 
-export async function getWebtoonPages(chapterId) {
-  const m = String(chapterId ?? '').replace(/^wt-/, '').match(/^(\d+):(\d+)$/);
-  if (!m) throw new Error('Invalid Webtoon chapter id');
-  // ALWAYS proxy=1 — the worker rewrites pstatic.net pages to same-domain
-  // /image URLs. Browsers loading pstatic.net directly from the frontend's
-  // origin hit its Referer wall (403).
-  const data = await get('/wt/pages', { title: m[1], episode: m[2], proxy: '1' });
+export async function getVioletPages(chapterId) {
+  const token = String(chapterId ?? '').replace(/^vs-/, '');
+  if (!isVioletChapterId(token)) throw new Error('Invalid Violet Scans chapter id');
+  // ALWAYS proxy=1 — the worker rewrites Violet Scans images to same-domain /image URLs.
+  const data = await get('/pages', { chapter: token, proxy: '1' });
   const payload = data?.data ?? data;
   const pages = Array.isArray(payload?.pages) ? payload.pages.filter(Boolean) : [];
   return {
     chapterId: String(chapterId),
     quality: 'dataSaver',
     count: payload?.count ?? pages.length,
-    readable: pages.length > 0,
-    via: payload?.via ?? 'webtoon',
+    readable: payload?.readable !== false && pages.length > 0,
+    via: payload?.via ?? 'violetscans',
     externalUrl: payload?.url ?? '',
-    message: pages.length ? '' : 'No pages found for this episode.',
+    message: pages.length ? '' : 'No pages found for this chapter.',
     pages,
   };
 }
 
-// ---------- Unified dispatchers (MangaDex UUID vs Webtoon title_no) ----------
+// ---------- Unified dispatchers (MangaDex vs Violet Scans) ----------
 
 export function getTitleForId(id) {
-  const bare = String(id ?? '').replace(/^wt-/, '');
-  return isWebtoonId(bare) ? getWebtoonTitle(bare) : getManhwaTitle(id);
+  return isVioletId(id) ? getVioletTitle(id) : getManhwaTitle(id);
 }
 
 export function getChaptersForTitle(id, opts) {
-  const bare = String(id ?? '').replace(/^wt-/, '');
-  return isWebtoonId(bare)
-    ? getWebtoonChapters(bare, opts)
-    : getManhwaChapters(id, opts);
+  return isVioletId(id) ? getVioletChapters(id, opts) : getManhwaChapters(id, opts);
 }
 
 export function getPagesForChapter(chapterId, quality) {
-  const bare = String(chapterId ?? '').replace(/^wt-/, '');
-  return isWebtoonChapterId(bare)
-    ? getWebtoonPages(chapterId)
-    : getManhwaPages(chapterId, quality);
+  return isVioletChapterId(chapterId) ? getVioletPages(chapterId) : getManhwaPages(chapterId, quality);
 }
 
-// Keyword search: MangaDex best-match via /title plus LINE Webtoon matches
-// via /wt/search (official source). Webtoon items come first.
+// Keyword search: MangaDex best-match via /title plus Violet Scans matches
+// via /vs/search. Violet Scans items come first.
 export async function searchManhwa(keyword) {
   const q = (keyword || '').trim();
   if (!q) return { items: [], exactMatch: null, resolvedFrom: '' };
-  const [md, wt] = await Promise.all([
+  const [md, vs] = await Promise.all([
     getManhwaTitle(q)
       .then((detail) => (isExplicitManhwa(detail) ? null : detail))
       .catch(() => null),
-    searchWebtoon(q, 10),
+    searchViolet(q, 10),
   ]);
-  const items = [...wt];
+  const items = [...vs];
   if (md) items.push(md);
   return {
     items,
