@@ -1,4 +1,5 @@
 import { fetchJSON } from './http';
+import { repairProxiedUrl, swapHost } from './streamRepair';
 
 // Aniko Backend v2.0 — https://aniko-backend.rk18109ry.workers.dev
 //   Catalog : /api/catalog/recent?page=&per_page=  /api/catalog/series/:id
@@ -789,28 +790,52 @@ export async function getEpisodeStream({ catalogEpId = null, aniId = null, malId
   if (!data?.success) throw new Error(data?.error || 'No stream found');
   const src = Array.isArray(data.sources) ? data.sources[0] : null;
   // Prefer the worker-proxied HLS URL — direct CDN links often 403 in browsers
-  const m3u8 = src?.proxy_url || src?.url || data.stream_url || '';
+  let m3u8 = src?.proxy_url || src?.url || data.stream_url || '';
   if (!m3u8) throw new Error('Stream has no playable URL');
+
+  // Self-heal when megaplay rotates its CDN fleet: the backend pins each
+  // stream/subtitle URL to one CDN host, and when that host is retired every
+  // proxied request answers "Upstream m3u8 error: 404" even though the file
+  // is alive on the current host at the same path. Verify via the proxy and,
+  // if dead, rebuild on megaplay's currently-healthy host (check_domain.json
+  // serves CORS \*). Repairs BOTH the play URL and its subtitle URLs.
+  const rebuildWith = (rawUpstream) => (healthyHost) => {
+    const next = swapHost(rawUpstream, healthyHost);
+    return `${STREAM_API}/api/proxy/m3u8?url=${encodeURIComponent(next)}`;
+  };
+  const upstreamM3u8 = src?.url || data.stream_url || '';
+  const healedM3u8 = upstreamM3u8 ? await repairProxiedUrl({ probeUrl: m3u8, rebuild: rebuildWith(upstreamM3u8) }) : m3u8;
+  if (healedM3u8) m3u8 = healedM3u8;
+
   const vttProxy = (u) => (u ? `${STREAM_API}/api/proxy/vtt?url=${encodeURIComponent(u)}` : '');
   const VALID_KINDS = ['subtitles', 'captions', 'descriptions'];
   return {
     m3u8,
     url: data.stream_url || m3u8,
     // Shape-agnostic: providers vary (url/file/src + label/name/lang)
-    subtitles: (data.subtitles || []).map((s) => {
+    subtitles: await Promise.all((data.subtitles || []).map(async (s) => {
       const rawUrl = s.url || s.file || s.src || s.uri || '';
       const kind = VALID_KINDS.includes(s.kind) ? s.kind : 'subtitles';
+      let proxiedUrl = s.proxy_url || s.proxyUrl || vttProxy(rawUrl);
+      // Subtitles live on the same rotatable CDN path as the video — heal them too
+      if (rawUrl && proxiedUrl) {
+        const healedSub = await repairProxiedUrl({
+          probeUrl: proxiedUrl,
+          rebuild: (healthyHost) => vttProxy(swapHost(rawUrl, healthyHost)),
+        });
+        if (healedSub) proxiedUrl = healedSub;
+      }
       return {
         url: rawUrl,
         // Prefer the backend's own routed proxy URL when provided
-        proxiedUrl: s.proxy_url || s.proxyUrl || vttProxy(rawUrl),
+        proxiedUrl,
         rawUrl,
         label: s.label || s.name || s.language || (s.lang ? String(s.lang).toUpperCase() : '') || 'Subtitles',
         lang: s.lang || s.language || '',
         kind,
         isDefault: !!s.default,
       };
-    }),
+    })),
     intro: data.intro && data.intro.end > 0 ? { start: data.intro.start || 0, end: data.intro.end } : null,
     outro: data.outro && data.outro.end > 0 ? { start: data.outro.start || 0, end: data.outro.end } : null,
     sourceInfo: {
