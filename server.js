@@ -4,7 +4,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), 'dist');
-const port = Number(process.env.PORT) || 3000;
+const port = Number(globalThis.process?.env?.PORT) || 3000;
 const types = {
   '.css': 'text/css',
   '.html': 'text/html',

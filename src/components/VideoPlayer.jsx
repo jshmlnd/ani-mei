@@ -38,6 +38,7 @@ export default function VideoPlayer({
   extSubtitles = [],
   intro = null,
   outro = null,
+  onStreamRefresh = null,
 }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -77,6 +78,7 @@ export default function VideoPlayer({
   const hlsStartedRef = useRef(false);
   const hlsTimeoutRef = useRef(null);
   const hlsRetryRef = useRef(0);
+  const streamRefreshRef = useRef(false);
   const doubleTapTimerRef = useRef(null);
   const doubleTapCountRef = useRef(0);
   const lastTapTimeRef = useRef(0);
@@ -342,6 +344,14 @@ const initHls = useCallback(() => {
               const isGone = httpCode === 403 || httpCode === 404 || httpCode === 410;
               const isPlaylist = data.details === 'manifestLoadError' || data.details === 'levelLoadError';
               if (isGone) {
+                if (onStreamRefresh && !streamRefreshRef.current) {
+                  streamRefreshRef.current = true;
+                  setError('Refreshing stream source...');
+                  setIsLoading(true);
+                  hls.destroy();
+                  onStreamRefresh();
+                  break;
+                }
                 // Removed/expired upstream file — retrying can't help, fail fast
                 // so one error shows instead of a storm of ts 403s.
                 setIsLoading(false);
@@ -392,7 +402,7 @@ const initHls = useCallback(() => {
       setError('Your browser does not support HLS video playback');
       setIsLoading(false);
     }
-  }, [src]);
+  }, [onStreamRefresh, src]);
 
   useEffect(() => {
     const t = setTimeout(initHls, 0);

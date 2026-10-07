@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   getAnimeById,
@@ -78,31 +78,31 @@ export default function Watch() {
   const selectedServer = servers[effectiveTrack]?.[0] || null;
 
   // ---- Stream ----
+  const fetchStream = useCallback(async () => {
+    setStreamLoading(true);
+    setStreamError(null);
+    setStream(null);
+    try {
+      const data = await getEpisodeStream({
+        catalogEpId: currentEpEntry?.id || null,
+        aniId: anime?.aniId || null,
+        malId: anime?.malId || null,
+        episode,
+        track: effectiveTrack,
+      });
+      setStream(data);
+    } catch (e) {
+      setStreamError(e?.message || 'Failed to load stream — try another server or episode');
+    } finally {
+      setStreamLoading(false);
+    }
+  }, [anime, currentEpEntry, episode, effectiveTrack]);
+
   useEffect(() => {
     if (!anime) return;
-    let cancelled = false;
-    const fetchStream = async () => {
-      setStreamLoading(true);
-      setStreamError(null);
-      setStream(null);
-      try {
-        const data = await getEpisodeStream({
-          catalogEpId: currentEpEntry?.id || null,
-          aniId: anime.aniId || null,
-          malId: anime.malId || null,
-          episode,
-          track: effectiveTrack,
-        });
-        if (!cancelled) setStream(data);
-      } catch (e) {
-        if (!cancelled) setStreamError(e?.message || 'Failed to load stream — try another server or episode');
-      } finally {
-        if (!cancelled) setStreamLoading(false);
-      }
-    };
-    fetchStream();
-    return () => { cancelled = true; };
-  }, [anime, episode, effectiveTrack, currentEpEntry]);
+    const timer = setTimeout(fetchStream, 0);
+    return () => clearTimeout(timer);
+  }, [anime, episode, effectiveTrack, currentEpEntry, fetchStream]);
 
   const handleEpisodeChange = (ep) => {
     const max = Math.max(1, totalEpisodes || 1);
@@ -201,6 +201,7 @@ export default function Watch() {
                   outro={stream.outro}
                   poster={anime.bannerImage || anime.coverImage?.large || anime.poster}
                   title={`${title} - Episode ${episode}`}
+                  onStreamRefresh={fetchStream}
                 />
               </div>
             )}
