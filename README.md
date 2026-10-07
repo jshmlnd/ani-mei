@@ -18,3 +18,15 @@ If you are developing a production application, we recommend using TypeScript wi
 TODO
 
 1. FIX API
+
+## Deploy to Heroku
+
+```bash
+heroku login
+heroku create
+heroku config:set VITE_STREAM_API_BASE=https://aniko-backend.rk18109ry.workers.dev
+git push heroku main
+heroku open
+```
+
+Heroku builds the Vite app during deployment and serves `dist` through `server.js`.

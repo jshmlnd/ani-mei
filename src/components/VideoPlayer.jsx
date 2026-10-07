@@ -245,6 +245,11 @@ const initHls = useCallback(() => {
         enableWorker: true,
         enableSoftwareAES: true,
         handlePartialData: true,
+        // Upstream CDN files 404/403 permanently when removed — don't
+        // retry those internally (each retry is another 403 in the console).
+        manifestLoadingMaxRetry: 1,
+        levelLoadingMaxRetry: 2,
+        fragLoadingMaxRetry: 1,
         subtitles: { enabled: true, default: false },
         renditionReport: { playlistType: 'EVENT' },
       });
@@ -332,12 +337,28 @@ const initHls = useCallback(() => {
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
           switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
+            case Hls.ErrorTypes.NETWORK_ERROR: {
+              const httpCode = data.response?.code ?? data.networkDetails?.status ?? 0;
+              const isGone = httpCode === 403 || httpCode === 404 || httpCode === 410;
+              const isPlaylist = data.details === 'manifestLoadError' || data.details === 'levelLoadError';
+              if (isGone) {
+                // Removed/expired upstream file — retrying can't help, fail fast
+                // so one error shows instead of a storm of ts 403s.
+                setIsLoading(false);
+                setError(
+                  isPlaylist
+                    ? `This episode's source was removed upstream (HTTP ${httpCode}) — try another episode`
+                    : `Stream blocked by CDN (HTTP ${httpCode}) — try a different server or episode`
+                );
+                hls.destroy();
+                break;
+              }
               if (data.details === 'manifestLoadError' || data.details === 'fragLoadError') {
                 if (hlsRetryRef.current < MAX_HLS_RETRIES) {
                   hlsRetryRef.current++;
                   hls.startLoad();
                 } else {
+                  setIsLoading(false);
                   setError('Stream blocked by CDN (403) — try a different server or episode');
                   hls.destroy();
                 }
@@ -345,10 +366,12 @@ const initHls = useCallback(() => {
                 hlsRetryRef.current++;
                 hls.startLoad();
               } else {
+                setIsLoading(false);
                 setError(`Network error: ${data.details || 'connection failed'}`);
                 hls.destroy();
               }
               break;
+            }
             case Hls.ErrorTypes.MEDIA_ERROR:
               if (hlsRetryRef.current < MAX_HLS_RETRIES) {
                 hlsRetryRef.current++;
