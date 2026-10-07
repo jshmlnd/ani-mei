@@ -306,7 +306,7 @@ const initHls = useCallback(() => {
         setIsLoading(false);
         hls.currentLevel = -1;
         video.play().catch((err) => {
-          if (err.name === 'AbortError') return;
+          if (err.name === 'AbortError' || err.name === 'NotAllowedError') return;
           console.error('[VideoPlayer] play() failed:', err);
           if (err.name === 'NotSupportedError') {
             setError('Stream format not supported — try a different server');
@@ -337,21 +337,22 @@ const initHls = useCallback(() => {
       });
 
       hls.on(Hls.Events.ERROR, (_, data) => {
+        const httpCode = data.response?.code ?? data.networkDetails?.status ?? 0;
+        const isGone = httpCode === 403 || httpCode === 404 || httpCode === 410;
+        if (isGone && onStreamRefresh && !streamRefreshRef.current) {
+          streamRefreshRef.current = true;
+          setError('Refreshing stream source...');
+          setIsLoading(true);
+          hls.destroy();
+          onStreamRefresh();
+          return;
+        }
+
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR: {
-              const httpCode = data.response?.code ?? data.networkDetails?.status ?? 0;
-              const isGone = httpCode === 403 || httpCode === 404 || httpCode === 410;
               const isPlaylist = data.details === 'manifestLoadError' || data.details === 'levelLoadError';
               if (isGone) {
-                if (onStreamRefresh && !streamRefreshRef.current) {
-                  streamRefreshRef.current = true;
-                  setError('Refreshing stream source...');
-                  setIsLoading(true);
-                  hls.destroy();
-                  onStreamRefresh();
-                  break;
-                }
                 // Removed/expired upstream file — retrying can't help, fail fast
                 // so one error shows instead of a storm of ts 403s.
                 setIsLoading(false);
