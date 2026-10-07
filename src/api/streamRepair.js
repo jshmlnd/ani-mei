@@ -42,6 +42,41 @@ async function probeUpstream(url) {
   }
 }
 
+// First non-comment line of an m3u8 — the variant playlist on a master, a
+// segment on a child playlist. The Worker rewrites every URI to an absolute
+// proxied URL, so no URL resolution is needed.
+export function firstUriLine(text) {
+  for (const line of String(text).split('\n')) {
+    const t = line.trim();
+    if (t && !t.startsWith('#')) return t;
+  }
+  return '';
+}
+
+// Walk the manifest chain exactly as the player will: master -> variant ->
+// first segment (HEAD). A dying CDN often still serves manifests while its
+// SEGMENT host 403s — probing only the manifest calls that stream "healthy"
+// and the player then hits a wall of ts 403s. Verifying the last hop makes
+// healing actually detect and repair the broken state.
+export async function probeHlsStream(url) {
+  let current = url;
+  for (let hop = 0; hop < 3; hop++) {
+    if (!current) return false;
+    const { signal, done } = withTimeout(STREAM_REPAIR_TIMEOUT_MS);
+    try {
+      const res = await fetch(current, { method: hop === 2 ? 'HEAD' : 'GET', signal });
+      if (!res.ok) return false;
+      if (hop === 2) return true; // segment head 200 — chain is healthy
+      current = firstUriLine(await res.text());
+    } catch {
+      return false;
+    } finally {
+      done();
+    }
+  }
+  return false;
+}
+
 // Megaplay's live CDN-fleet health list: { fallback: "host", failed: [], ... }.
 // Served with permissive CORS so this works straight from the browser.
 export async function fetchCdnHealth() {
@@ -75,19 +110,20 @@ export function swapHost(url, newHost) {
 
 // Verify `probeUrl` (the backend's token-proxied URL); if the upstream file is
 // gone, rebuild the URL on megaplay's currently-healthy CDN host using
-// `rebuild(healthyHost)` and verify that too. Returns the first working URL,
-// or null if nothing verifies (caller keeps the original so its existing
-// error handling kicks in).
-export async function repairProxiedUrl({ probeUrl, rebuild }) {
+// `rebuild(healthyHost)` and verify that too. `probe` defaults to a HEAD on
+// the manifest; video streams pass probeHlsStream to also verify segments.
+// Returns the first working URL, or null if nothing verifies (caller keeps
+// the original so its existing error handling kicks in).
+export async function repairProxiedUrl({ probeUrl, probe = probeUpstream, rebuild }) {
   if (!probeUrl) return null;
-  if (await probeUpstream(probeUrl)) return probeUrl;
+  if (await probe(probeUrl)) return probeUrl;
 
   const healthyHost = await fetchCdnHealth();
   if (!healthyHost) return null;
 
   try {
     const candidate = rebuild(healthyHost);
-    if (candidate && candidate !== probeUrl && (await probeUpstream(candidate))) {
+    if (candidate && candidate !== probeUrl && (await probe(candidate))) {
       return candidate;
     }
   } catch {

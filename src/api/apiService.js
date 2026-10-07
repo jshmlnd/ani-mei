@@ -1,5 +1,5 @@
 import { fetchJSON } from './http';
-import { repairProxiedUrl, swapHost } from './streamRepair';
+import { repairProxiedUrl, probeHlsStream, swapHost } from './streamRepair';
 
 // Aniko Backend v2.0 — https://aniko-backend.rk18109ry.workers.dev
 //   Catalog : /api/catalog/recent?page=&per_page=  /api/catalog/series/:id
@@ -804,7 +804,10 @@ export async function getEpisodeStream({ catalogEpId = null, aniId = null, malId
     return `${STREAM_API}/api/proxy/m3u8?url=${encodeURIComponent(next)}`;
   };
   const upstreamM3u8 = src?.url || data.stream_url || '';
-  const healedM3u8 = upstreamM3u8 ? await repairProxiedUrl({ probeUrl: m3u8, rebuild: rebuildWith(upstreamM3u8) }) : m3u8;
+  // Chain probe (master -> variant -> segment): the CDN can serve manifests
+  // fine while its segment host 403s, so a manifest-only probe would "heal"
+  // nothing and the player would hit a ts-403 wall immediately.
+  const healedM3u8 = upstreamM3u8 ? await repairProxiedUrl({ probeUrl: m3u8, probe: probeHlsStream, rebuild: rebuildWith(upstreamM3u8) }) : m3u8;
   if (healedM3u8) m3u8 = healedM3u8;
 
   const vttProxy = (u) => (u ? `${STREAM_API}/api/proxy/vtt?url=${encodeURIComponent(u)}` : '');
