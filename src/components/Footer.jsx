@@ -38,11 +38,16 @@ export default function Footer() {
               <ul className="space-y-2.5">
                 {['Action', 'Comedy', 'Romance', 'Sci-Fi'].map((g) => (
                   <li key={g}>
-                    <Link to={`/search?genre=${g}`} className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors duration-200">
+                    <Link to={`/genres/${encodeURIComponent(g)}`} className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors duration-200">
                       {g}
                     </Link>
                   </li>
                 ))}
+                <li>
+                  <Link to="/genres" className="text-sm text-[var(--accent)] hover:underline transition-colors duration-200">
+                    All genres
+                  </Link>
+                </li>
               </ul>
             </div>
 

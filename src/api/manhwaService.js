@@ -183,20 +183,45 @@ export function chapterLabel(ch) {
   return 'Oneshot';
 }
 
-export async function getManhwaChapters(hid, { page = 1, limit = 100, order = 'asc' } = {}) {
-  if (!hid) throw new Error('Missing title id');
-  const data = await get('/chapters', { hid, lang: 'en', page, limit, order });
+// MangaDex stores chapters per translation language, and the worker takes one
+// lang at a time. Many titles have no English release at all, so when 'en'
+// comes back empty we walk common languages until one actually has chapters.
+const CHAPTER_LANGS = ['en', 'ko', 'ja', 'es-la', 'vi', 'id', 'pt-br', 'ru', 'tr', 'fr', 'it', 'zh-hk'];
+const chapterLang = new Map(); // hid -> lang that has chapters
+
+async function fetchChaptersPage(hid, lang, { page, limit, order }) {
+  const data = await get('/chapters', { hid, lang, page, limit, order });
   const payload = data?.data ?? data;
   const meta = payload?.meta ?? data?.meta ?? {};
   const chapters = pickList(payload?.items ?? payload?.chapters ?? payload)
     .map(normalizeChapter)
     .filter(Boolean);
+  return { chapters, meta };
+}
+
+export async function getManhwaChapters(hid, { page = 1, limit = 100, order = 'asc' } = {}) {
+  if (!hid) throw new Error('Missing title id');
+  let lang = chapterLang.get(hid) ?? 'en';
+  let res = await fetchChaptersPage(hid, lang, { page, limit, order });
+  if (page === 1 && res.chapters.length === 0) {
+    for (const candidate of CHAPTER_LANGS) {
+      if (candidate === lang) continue;
+      const alt = await fetchChaptersPage(hid, candidate, { page: 1, limit, order });
+      if (alt.chapters.length) {
+        lang = candidate;
+        res = alt;
+        break;
+      }
+    }
+    chapterLang.set(hid, lang);
+  }
   return {
-    chapters,
+    chapters: res.chapters,
     pageInfo: {
-      hasNext: !!meta.hasNext,
-      total: meta.total ?? chapters.length,
-      page: meta.page ?? page,
+      hasNext: !!res.meta.hasNext,
+      total: res.meta.total ?? res.chapters.length,
+      page: res.meta.page ?? page,
+      lang,
     },
   };
 }
@@ -397,6 +422,50 @@ export function getChaptersForTitle(id, opts) {
 
 export function getPagesForChapter(chapterId, quality) {
   return isVioletChapterId(chapterId) ? getVioletPages(chapterId) : getManhwaPages(chapterId, quality);
+}
+
+// ---------- Genres ----------
+// The worker has no genre filter param (only /browse, which returns filter
+// OPTIONS, not items), so genre browsing pools the live listings and filters
+// client-side by the genre names MangaDex attaches to each title.
+const GENRE_SOURCES = [() => getManhwaPopular(50), () => getManhwaLatest(50), () => getManhwaTrending(50)];
+
+let _genrePool = null;
+
+async function getGenrePool() {
+  if (_genrePool) return _genrePool;
+  const settled = await Promise.allSettled(GENRE_SOURCES.map((fn) => fn()));
+  const byId = new Map();
+  for (const s of settled) {
+    if (s.status !== 'fulfilled') continue;
+    for (const item of s.value) if (!byId.has(item.id)) byId.set(item.id, item);
+  }
+  _genrePool = [...byId.values()];
+  return _genrePool;
+}
+
+const normGenre = (g) => String(g || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+export async function getGenresList() {
+  const pool = await getGenrePool();
+  const counts = new Map();
+  for (const item of pool) {
+    for (const g of item.genres || []) {
+      const key = normGenre(g);
+      if (!key) continue;
+      const entry = counts.get(key) || { name: g, count: 0 };
+      entry.count += 1;
+      counts.set(key, entry);
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+export async function getManhwaByGenre(genre) {
+  const want = normGenre(genre);
+  if (!want) return [];
+  const pool = await getGenrePool();
+  return pool.filter((item) => (item.genres || []).some((g) => normGenre(g) === want));
 }
 
 // Keyword search: MangaDex best-match via /title plus Violet Scans matches

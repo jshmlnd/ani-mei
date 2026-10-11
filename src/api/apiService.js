@@ -352,6 +352,16 @@ query ($search: String, $page: Int, $perPage: Int) {
   }
 }`;
 
+const GENRE_QUERY = `
+query ($genre: String, $page: Int, $perPage: Int) {
+  Page(page: $page, perPage: $perPage) {
+    pageInfo { total perPage currentPage lastPage hasNextPage }
+    media(type: ANIME, genre_in: [$genre], sort: SCORE_DESC, isAdult: false) {
+      ${MEDIA_FIELDS}
+    }
+  }
+}`;
+
 const DETAILS_QUERY = `
 query ($id: Int) {
   Media(id: $id, type: ANIME) {
@@ -468,6 +478,30 @@ export async function searchAnime(keyword, page = 1, perPage = 20) {
       console.warn('[searchAnime] Jikan also failed:', e2?.message);
       return empty;
     }
+  }
+}
+
+export async function getAnimeByGenre(genre, page = 1, perPage = 20) {
+  const empty = { media: [], pageInfo: { hasNextPage: false, currentPage: page, lastPage: page, total: 0, perPage } };
+  const g = (genre || '').trim();
+  if (!g) return empty;
+  try {
+    const data = await post(GENRE_QUERY, { genre: g, page, perPage });
+    const media = (data?.Page?.media || []).map(normalizeAniListMedia).filter(Boolean);
+    const info = data?.Page?.pageInfo || {};
+    return {
+      media,
+      pageInfo: {
+        hasNextPage: !!info.hasNextPage,
+        currentPage: info.currentPage || page,
+        lastPage: info.lastPage || page,
+        total: info.total ?? media.length,
+        perPage,
+      },
+    };
+  } catch (e) {
+    console.warn('[getAnimeByGenre] AniList failed:', e?.message);
+    return empty;
   }
 }
 
