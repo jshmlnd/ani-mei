@@ -16,15 +16,31 @@ import {
 } from 'lucide-react';
 
 const QUALITY_KEY = 'animei-reader-quality';
-const MAX_CHAPTER_PAGES = 8; // 8 x 100 chapters cap for prev/next navigation
+const MAX_CHAPTER_PAGES = 25; // 25 x 100 chapters cap for prev/next navigation
 
-/* ---------- Page image: single timed retry, then placeholder ----------
-   Page URLs already come proxied (/pages and /wt/pages are always called
-   with proxy=1, rewritten to same-domain /image). At-home nodes flap, so
-   on error we wait ~1s and reload the same URL once before giving up.
+/* Page URLs come back proxied (proxy=1 → same-domain /image?url=...), but the
+   worker only allowlists some hosts — violetmanga.com is rejected with 400
+   while the origin URL itself serves fine. So: unwrap the proxy target. */
+function unproxy(url) {
+  try {
+    const parsed = new URL(url);
+    const raw = parsed.pathname === '/image' ? parsed.searchParams.get('url') : null;
+    if (raw) return raw;
+  } catch {
+    // not a URL — use as-is
+  }
+  return url;
+}
+
+/* ---------- Page image: retries, then placeholder ----------
+   Proxied URLs: fail over to the raw origin URL immediately (the worker
+   rejects whole hosts, retrying it is pointless), then retry that once after
+   ~1s for flapping at-home nodes. Non-proxied URLs just retry once.
    Remounts (key change) reset the cycle. */
 function ReaderPage({ src, alt, eager }) {
-  const [nonce, setNonce] = useState(0);
+  const original = unproxy(src);
+  const attempts = original === src ? [src, src] : [src, original, original];
+  const [attempt, setAttempt] = useState(0);
   const [waiting, setWaiting] = useState(false);
   const [failed, setFailed] = useState(false);
   const timerRef = useRef(null);
@@ -35,7 +51,7 @@ function ReaderPage({ src, alt, eager }) {
     clearTimeout(timerRef.current);
     setFailed(false);
     setWaiting(false);
-    setNonce((n) => n + 1);
+    setAttempt(0);
   };
 
   if (failed) {
@@ -67,21 +83,24 @@ function ReaderPage({ src, alt, eager }) {
 
   return (
     <img
-      key={nonce}
-      src={src}
+      key={attempt}
+      src={attempts[attempt]}
       alt={alt}
       loading={eager ? 'eager' : 'lazy'}
       referrerPolicy="no-referrer"
       onError={() => {
-        if (nonce >= 1) {
+        const next = attempt + 1;
+        if (next >= attempts.length) {
           setFailed(true);
           return;
         }
-        setWaiting(true);
+        // Different URL (raw failover) → swap instantly, no spinner.
+        const delay = attempts[next] === attempts[attempt] ? 1000 : 0;
+        if (delay) setWaiting(true);
         timerRef.current = setTimeout(() => {
           setWaiting(false);
-          setNonce((n) => n + 1);
-        }, 1000);
+          setAttempt(next);
+        }, delay);
       }}
       className="w-full h-auto block bg-[var(--bg-elevated)]"
     />
