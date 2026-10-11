@@ -46,8 +46,9 @@ export function normalizeManhwa(raw) {
       raw.altTitles.find((t) => t && t !== title && /[a-zA-Z]{3,}/.test(t)) ?? '';
   }
 
-  const poster = raw.poster ?? raw.cover ?? raw.image ?? raw.thumbnail ?? '';
-  const thumbnail = raw.posterMedium ?? poster;
+  const poster = proxiedImage(raw.poster ?? raw.cover ?? raw.image ?? raw.thumbnail ?? '');
+  const medium = proxiedImage(raw.posterMedium ?? '');
+  const thumbnail = medium || poster;
 
   // Chapter may be a bare number ("42") — label it; leave "Ch. 12" style as-is
   let latestChapter = raw.latestChapter ?? raw.lastChapter ?? raw.chapter ?? '';
@@ -279,13 +280,16 @@ function pickTitleDetail(payload) {
   return payload;
 }
 
-// ---------- Violet Scans source (violetscans.org) ----------
-// Covers are rewritten to the worker's same-domain /image proxy (allowlisted,
-// edge-cached); chapter pages already come back proxied from /pages?proxy=1.
+// ---------- Proxied covers ----------
+// Covers from these hosts are rewritten to the worker's same-domain /image
+// proxy (allowlisted, edge-cached). Both origins serve referer/region-sensitive
+// hotlink responses, so the browser must never load them directly — otherwise
+// MangaDex-sourced results (e.g. best-match search) show broken cards.
+const PROXY_COVER_HOST = /(?:mangadex|violetscans)\.org/i;
 
 export function proxiedImage(url) {
   if (!url || typeof url !== 'string') return '';
-  if (!/violetscans\.org/i.test(url)) return url;
+  if (!PROXY_COVER_HOST.test(url)) return url;
   return `${MANHWA_API}/image?url=${encodeURIComponent(url)}`;
 }
 
