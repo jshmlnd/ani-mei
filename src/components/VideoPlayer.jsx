@@ -3,6 +3,7 @@ import Hls from 'hls.js';
 import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2, Subtitles, Gauge, PictureInPicture, PictureInPicture2 } from 'lucide-react';
 import SubtitleOverlay from './SubtitleOverlay';
 import { parseVtt } from '../utils/vtt';
+import { getExternalSubtitleIndex } from '../utils/videoTracks';
 
 const MAX_HLS_RETRIES = 2;
 
@@ -70,6 +71,8 @@ export default function VideoPlayer({
   // ext index -> { status: 'loading' | 'ready' | 'error', cues: [] } for the custom renderer
   const [parsedTracks, setParsedTracks] = useState({});
   const lastSubtitleRef = useRef(null);
+  const activeExternalSubtitleRef = useRef(-1);
+  const nativeFullscreenSubtitleRef = useRef(-1);
   const retriedRef = useRef({});
   const initialExtRef = useRef(getInitialExt());
   const [doubleTapSide, setDoubleTapSide] = useState(null);
@@ -489,6 +492,18 @@ const initHls = useCallback(() => {
     };
   }, []);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onNativeFullscreenEnd = () => {
+      if (nativeFullscreenSubtitleRef.current < 0) return;
+      setExtVisible(-1);
+      nativeFullscreenSubtitleRef.current = -1;
+    };
+    video.addEventListener('webkitendfullscreen', onNativeFullscreenEnd);
+    return () => video.removeEventListener('webkitendfullscreen', onNativeFullscreenEnd);
+  }, [setExtVisible]);
+
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -559,15 +574,25 @@ const initHls = useCallback(() => {
     }
 
     // iOS Safari fallback — no container fullscreen support, use native player
-    // (custom UI is unavailable in this mode, expected platform limitation).
+    // (custom UI and DOM overlays are unavailable in this mode).
     if (video && video.webkitEnterFullscreen) {
+      const extIdx = activeExternalSubtitleRef.current;
+      if (extIdx >= 0) {
+        // Native fullscreen cannot render the React overlay, so let the
+        // selected external <track> render through the platform player.
+        setExtVisible(extIdx);
+        nativeFullscreenSubtitleRef.current = extIdx;
+      }
       try {
         video.webkitEnterFullscreen();
       } catch {
-        // ignore
+        if (extIdx >= 0) {
+          setExtVisible(-1);
+          nativeFullscreenSubtitleRef.current = -1;
+        }
       }
     }
-  }, []);
+  }, [setExtVisible]);
 
   const changeQuality = useCallback((levelIndex) => {
     if (hlsRef.current) {
@@ -619,6 +644,10 @@ const initHls = useCallback(() => {
       return n > 1 ? { ...o, label: `${o.label} ${n}` } : o;
     });
   }, [subtitles, extSubtitles]);
+
+  useEffect(() => {
+    activeExternalSubtitleRef.current = getExternalSubtitleIndex(selectedSubtitle, subOptions);
+  }, [selectedSubtitle, subOptions]);
 
   const selectSubtitle = useCallback((optIdx) => {
     if (optIdx === -1) {
