@@ -1,4 +1,4 @@
-import { Server, Captions, Mic, Film, AlertCircle } from 'lucide-react';
+import { Server, Captions, Mic, Film, AlertCircle } from '@/components/icons';
 
 const TYPE_ORDER = ['sub', 'dub', 'raw', 'hsub', 'softsub'];
 const TYPE_LABELS = {
@@ -44,26 +44,26 @@ export default function ServerSelector({
   if (loading) {
     return (
       <div className="flex items-center gap-3 py-4 px-1">
-        <div className="w-4 h-4 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
-        <span className="text-xs font-medium text-[var(--text-muted)]">Loading servers...</span>
+        <div className="flex items-end gap-1.5 h-5" aria-hidden="true">{[0, 1, 2, 3].map((i) => <span key={i} className="bead bead-drop" style={{ animationDelay: `${i * 0.16}s` }} />)}</div>
+        <span className="text-xs text-[var(--text-muted)]">Loading servers...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 py-3 px-3 rounded-xl bg-red-500/5 border border-red-500/10">
+      <div className="flex items-center gap-2 py-3 px-3 bg-[var(--r2)] border border-[var(--error)]">
         <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-        <span className="text-xs text-red-300/80">{error}</span>
+        <span className="text-xs text-[var(--error)]">{error}</span>
       </div>
     );
   }
 
   if (!hasServers) {
     return (
-      <div className="py-4 px-3 rounded-xl bg-[var(--accent)]/[0.03] border border-[var(--border-subtle)] text-center">
+      <div className="py-4 px-3 border border-[var(--border-subtle)] text-center">
         <p className="text-xs text-[var(--text-muted)]">No servers available for this episode</p>
-        <p className="text-[10px] text-[var(--text-muted)]/60 mt-1">Try switching episode or check back later</p>
+        <p className="text-[10px] text-[var(--text-muted)] mt-1">Try switching episode or check back later</p>
       </div>
     );
   }
@@ -72,7 +72,7 @@ export default function ServerSelector({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Server className="w-3.5 h-3.5 text-[var(--accent)]" />
-        <span className="text-xs font-bold tracking-widest text-white uppercase">Servers</span>
+        <span className="text-xs tracking-widest text-[var(--r7)] uppercase">Servers</span>
       </div>
 
       <div className="space-y-3">
@@ -84,10 +84,10 @@ export default function ServerSelector({
             <div key={type} className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <TypeIcon className="w-3 h-3 text-[var(--text-muted)]" />
-                <span className="text-[10px] font-bold tracking-widest text-[var(--text-muted)] uppercase">
+                <span className="text-[10px] tracking-widest text-[var(--text-muted)] uppercase">
                   {formatType(type)}
                 </span>
-                <span className="text-[10px] text-[var(--text-muted)]/50">• {list.length}</span>
+                <span className="text-[10px] text-[var(--text-muted)]">• {list.length}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {list.map((srv, i) => {
@@ -96,10 +96,10 @@ export default function ServerSelector({
                     <button
                       key={srv.linkId || srv.id || `${srv.name}-${type}-${i}`}
                       onClick={() => onSelect(srv)}
-                      className={`px-3.5 py-1.5 text-xs font-semibold cursor-pointer rounded-full border transition-all duration-200 ${
+                      className={`px-3.5 py-1.5 text-xs  cursor-pointer  border transition-all duration-200 ${
                         isActive
-                          ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
-                          : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white hover:border-[var(--accent)]/[0.2]'
+                          ? 'bg-[var(--accent)] text-[var(--r0)] border-[var(--accent)]  '
+                          : ' text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--r3)] hover:text-[var(--r7)] hover:border-[var(--r4)]'
                       }`}
                       title={`${srv.name} (${type})`}
                     >
@@ -114,11 +114,11 @@ export default function ServerSelector({
       </div>
 
       {selected && (
-        <div className="flex items-center gap-1.5 pt-2 border-t border-[var(--border-subtle)] mt-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <div className="flex items-center gap-2.5 pt-3 border-t border-[var(--border-subtle)] mt-3">
+          <span className="bead bead-lit" style={{ "--b": "8px" }} />
           <span className="text-[11px] text-[var(--text-muted)]">
-            Playing via <span className="font-semibold text-[var(--text-secondary)]">{selected.name}</span>
-            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/20">
+            Playing via <span className="text-[var(--text-secondary)]">{selected.name}</span>
+            <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-[var(--r3)] text-[var(--accent)] border border-[var(--r4)]">
               {formatType(selected.type)}
             </span>
           </span>

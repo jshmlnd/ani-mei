@@ -1,3 +1,4 @@
+import { GradientHeading } from '@/components/ui/gradient-heading';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getAnimeByGenre } from '../api/apiService';
@@ -5,7 +6,7 @@ import { getGenresList, getManhwaByGenre } from '../api/manhwaService';
 import AnimeCard from '../components/AnimeCard';
 import { ManhwaCard, ManhwaDetail } from '../components/Manhwa';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { Clapperboard, BookOpen, Check, Tag, Search as SearchIcon } from 'lucide-react';
+import { Clapperboard, BookOpen, Check, Tag, Search as SearchIcon } from '@/components/icons';
 
 const PER_PAGE = 24;
 
@@ -37,7 +38,7 @@ function GenreIndex({ counts, onPick }) {
       <div className="mb-8">
         <div className="flex items-center gap-2">
           <Tag className="w-6 h-6 text-[var(--accent)]" />
-          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Browse by Genre</h1>
+          <GradientHeading as="h1" variant="animei" size="sm" className="leading-tight">Browse by Genre</GradientHeading>
         </div>
         <p className="text-sm text-[var(--text-muted)] mt-1.5">
           Anime and manga/manhwa, filtered by genre
@@ -51,7 +52,7 @@ function GenreIndex({ counts, onPick }) {
             <button
               key={g}
               onClick={() => onPick(g)}
-              className="group px-5 py-2.5 rounded-full border border-[var(--border-subtle)] bg-white/[0.03] hover:bg-[var(--accent)]/10 hover:border-[var(--accent)]/30 transition-all duration-200 text-sm font-semibold text-[var(--text-secondary)] hover:text-white"
+              className="group px-5 py-2.5 border border-[var(--border-subtle)] hover:bg-[var(--r3)] hover:border-[var(--accent)] transition-all duration-200 text-sm text-[var(--text-secondary)] hover:text-[var(--r7)]"
             >
               {g}
               {n > 0 && (
@@ -175,7 +176,7 @@ function GenreResults({ genre }) {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-2 min-w-0">
           <Tag className="w-6 h-6 text-[var(--accent)] shrink-0" />
-          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight truncate">{genre}</h1>
+          <GradientHeading as="h1" variant="animei" size="sm" className="leading-tight truncate">{genre}</GradientHeading>
         </div>
         <div className="flex items-center gap-1.5">
           {[
@@ -185,10 +186,10 @@ function GenreResults({ genre }) {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full border transition-all duration-200 ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm   border transition-all duration-200 ${
                 tab === t.key
-                  ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
-                  : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white hover:border-[var(--accent)]/[0.2]'
+                  ? 'bg-[var(--accent)] text-[var(--r0)] border-[var(--accent)]  '
+                  : ' text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--r3)] hover:text-[var(--r7)] hover:border-[var(--r4)]'
               }`}
             >
               <t.icon className="w-4 h-4" />
@@ -245,8 +246,8 @@ function GenreResults({ genre }) {
 function EmptyState({ label }) {
   return (
     <div className="text-center py-24">
-      <SearchIcon className="w-20 h-20 mx-auto text-[var(--text-muted)]/30 mb-4" />
-      <p className="text-xl font-bold text-[var(--text-secondary)] mb-2">{label}</p>
+      <SearchIcon className="w-20 h-20 mx-auto text-[var(--text-muted)] mb-4" />
+      <p className="text-xl text-[var(--text-secondary)] mb-2">{label}</p>
       <p className="text-sm text-[var(--text-muted)]">Try another genre</p>
     </div>
   );
@@ -255,7 +256,7 @@ function EmptyState({ label }) {
 function EndMarker({ total, label }) {
   return (
     <div className="py-10 text-center">
-      <div className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-[var(--text-muted)] bg-white/[0.03] rounded-full border border-white/[0.06]">
+      <div className="inline-flex items-center gap-2 px-4 py-2 text-xs text-[var(--text-muted)] border border-[var(--r4)]">
         <Check className="w-3.5 h-3.5" />
         {total > 0 ? `${total} ${label}` : 'Nothing here'}
       </div>

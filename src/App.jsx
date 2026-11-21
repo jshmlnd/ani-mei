@@ -17,7 +17,7 @@ function AppContent() {
   const isLanding = location.pathname === '/';
 
   return (
-    <div className="min-h-screen flex flex-col bg-base-100">
+    <div className="min-h-screen flex flex-col bg-[var(--bg-deep)]">
       {!isLanding && <Navbar />}
       <main className="flex-1">
         <Routes>

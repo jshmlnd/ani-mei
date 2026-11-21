@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
-import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2, Subtitles, Gauge, PictureInPicture, PictureInPicture2 } from 'lucide-react';
+import { AlertTriangle, Play, Pause, SkipBack, SkipForward, VolumeX, Volume1, Volume2, Minimize2, Maximize2, Subtitles, Gauge, PictureInPicture, PictureInPicture2 } from '@/components/icons';
 import SubtitleOverlay from './SubtitleOverlay';
 import { parseVtt } from '../utils/vtt';
 import { getExternalSubtitleIndex } from '../utils/videoTracks';
@@ -65,6 +65,7 @@ export default function VideoPlayer({
   };
   const [selectedSubtitle, setSelectedSubtitle] = useState(() => (extSubtitles.length > 0 ? getInitialExt() : -1));
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   // ext index -> true when both proxied + raw URLs failed to load
   const [failedSubs, setFailedSubs] = useState({});
@@ -599,6 +600,7 @@ const initHls = useCallback(() => {
       hlsRef.current.currentLevel = levelIndex;
       setQuality(levelIndex);
     }
+    setShowQualityMenu(false);
   }, []);
 
   const skip = useCallback((seconds) => {
@@ -950,6 +952,13 @@ const initHls = useCallback(() => {
     return () => document.removeEventListener('click', close);
   }, [showSpeedMenu]);
 
+  useEffect(() => {
+    if (!showQualityMenu) return;
+    const close = () => setShowQualityMenu(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showQualityMenu]);
+
   // Close subtitle menu on outside click
   useEffect(() => {
     if (!showSubtitleMenu) return;
@@ -995,11 +1004,11 @@ const initHls = useCallback(() => {
   return (
     <div
       ref={containerRef}
-      className={`relative bg-black rounded-2xl overflow-hidden group select-none w-full video-player ${
+      className={`relative bg-black  overflow-hidden group select-none w-full video-player ${
         showControls ? 'vp-controls-visible' : 'vp-controls-hidden'
       } ${
         isFullscreen ? '!rounded-none border-0' : ''
-      } ${isFullscreen && !showControls ? 'cursor-none' : ''} fullscreen:w-screen fullscreen:h-screen fullscreen:max-w-none fullscreen:rounded-none fullscreen:border-0 fullscreen:flex fullscreen:items-center fullscreen:justify-center fullscreen:bg-black`}
+      } ${isFullscreen && !showControls ? 'cursor-none' : ''} fullscreen:w-screen fullscreen:h-screen fullscreen:max-w-none  fullscreen:border-0 fullscreen:flex fullscreen:items-center fullscreen:justify-center fullscreen:bg-black`}
       style={{ '--cue-lift': `${showControls ? -CUE_LIFT_CONTROLS_VISIBLE : -CUE_LIFT_CONTROLS_HIDDEN}px` }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
@@ -1045,7 +1054,7 @@ const initHls = useCallback(() => {
       {/* Skip intro / outro */}
       {intro && currentTime >= intro.start && currentTime < intro.end && (
         <button
-          className="absolute bottom-28 right-4 z-20 cursor-pointer px-4 py-2 text-xs font-bold text-white bg-[var(--accent)] hover:bg-[var(--accent-deep)] rounded-full shadow-lg shadow-[var(--accent)]/30 transition-all duration-200 hover:scale-105"
+          className="absolute bottom-28 right-4 z-20 cursor-pointer px-4 py-2 text-xs text-[var(--r0)] bg-[var(--accent)] hover:bg-[var(--accent-deep)] transition-all duration-200"
           onClick={() => { const v = videoRef.current; if (v) v.currentTime = intro.end; }}
         >
           Skip Intro
@@ -1053,7 +1062,7 @@ const initHls = useCallback(() => {
       )}
       {outro && currentTime >= outro.start && currentTime < outro.end && (
         <button
-          className="absolute bottom-28 right-4 z-20 cursor-pointer px-4 py-2 text-xs font-bold text-white bg-[var(--accent)] hover:bg-[var(--accent-deep)] rounded-full shadow-lg shadow-[var(--accent)]/30 transition-all duration-200 hover:scale-105"
+          className="absolute bottom-28 right-4 z-20 cursor-pointer px-4 py-2 text-xs text-[var(--r0)] bg-[var(--accent)] hover:bg-[var(--accent-deep)] transition-all duration-200"
           onClick={() => { const v = videoRef.current; if (v) v.currentTime = outro.end; }}
         >
           Skip Outro
@@ -1061,23 +1070,23 @@ const initHls = useCallback(() => {
       )}
 
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <div className="w-10 h-10 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--r0)]">
+          <div className="flex items-end gap-1.5 h-5" aria-hidden="true">{[0, 1, 2, 3].map((i) => <span key={i} className="bead bead-drop" style={{ animationDelay: `${i * 0.16}s` }} />)}</div>
         </div>
       )}
 
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--r0)]">
           <div className="text-center max-w-md px-4">
-            <AlertTriangle className="w-16 h-16 mx-auto text-red-400/60 mb-4" />
-            <p className="text-white text-lg font-semibold mb-2">Video Unavailable</p>
+            <AlertTriangle className="w-16 h-16 mx-auto text-[var(--error)] mb-4" />
+            <p className="text-[var(--r7)] text-lg mb-2">Video Unavailable</p>
             <p className="text-gray-400 text-sm mb-4">{error}</p>
             <div className="flex flex-col gap-2 items-center">
               <div className="flex gap-2 justify-center">
-                <button className="px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white text-sm font-bold rounded-full transition-all" onClick={() => { setError(null); setIsLoading(true); initHls(); }}>
+                <button className="px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-[var(--r0)] text-sm transition-all" onClick={() => { setError(null); setIsLoading(true); initHls(); }}>
                   Try Again
                 </button>
-                <button className="px-4 py-2 text-gray-400 hover:text-white text-sm font-medium rounded-full border border-white/[0.1] hover:border-white/[0.2] transition-all" onClick={() => window.location.reload()}>
+                <button className="px-4 py-2 text-gray-400 hover:text-[var(--r7)] text-sm border border-[var(--r4)] hover:border-[var(--r4)] transition-all" onClick={() => window.location.reload()}>
                   Reload Page
                 </button>
               </div>
@@ -1091,23 +1100,23 @@ const initHls = useCallback(() => {
 
       {!isPlaying && !isLoading && !error && (
         <button className="absolute inset-0 flex items-center justify-center" onClick={togglePlay}>
-          <div className="w-20 h-20 bg-[var(--accent)]/80 cursor-pointer rounded-full flex items-center justify-center hover:bg-[var(--accent)] transition-all duration-300 hover:scale-110 shadow-lg shadow-[var(--accent)]/25">
-            <Play className="w-10 h-10 text-white ml-1" fill="currentColor" />
+          <div className="w-20 h-20 bg-[var(--accent)] border-2 border-[var(--r0)] shadow-[inset_0_-6px_0_var(--accent-deep)] cursor-pointer flex items-center justify-center hover:bg-[var(--accent-deep)] transition-colors duration-100">
+            <Play className="w-10 h-10 text-[var(--r0)]" />
           </div>
         </button>
       )}
 
       {doubleTapSide && (
         <div className={`absolute inset-y-0 ${doubleTapSide === 'left' ? 'left-0 right-auto' : 'right-0 left-auto'} flex items-center justify-center pointer-events-none`}>
-          <div className="bg-black/60 rounded-full px-4 py-2 flex items-center gap-2 animate-pulse">
-            {doubleTapSide === 'left' ? <SkipBack className="w-5 h-5 text-white" /> : <SkipForward className="w-5 h-5 text-white" />}
-            <span className="text-white text-sm font-bold">10s</span>
+          <div className="bg-[var(--r0)] px-4 py-2 flex items-center gap-2 animate-pulse">
+            {doubleTapSide === 'left' ? <SkipBack className="w-5 h-5 text-[var(--r7)]" /> : <SkipForward className="w-5 h-5 text-[var(--r7)]" />}
+            <span className="text-[var(--r7)] text-sm">10s</span>
           </div>
         </div>
       )}
 
       <div
-        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent transition-opacity duration-300 ${
+        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[var(--r0)] via-transparent to-transparent transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onTouchStart={pokeControls}
@@ -1117,35 +1126,36 @@ const initHls = useCallback(() => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 pb-3">
-          <div className="relative h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 group/progress hover:h-2.5 transition-all" onClick={seek}>
-            <div className="absolute h-full bg-white/30 rounded-full" style={{ width: `${bufferedPercent}%` }} />
-            <div className="absolute h-full bg-[var(--accent)] rounded-full" style={{ width: `${progressPercent}%` }} />
-            <div className="absolute w-3 h-3 bg-[var(--accent)] rounded-full top-1/2 -translate-y-1/2 opacity-0 group-hover/progress:opacity-100 transition-opacity" style={{ left: `calc(${progressPercent}% - 6px)` }} />
+          <div className="relative h-1.5 bg-[var(--r4)] cursor-pointer mb-3 group/progress hover:h-2.5 transition-all" onClick={seek}>
+            <div className="absolute h-full bg-[var(--r4)]" style={{ width: `${bufferedPercent}%` }} />
+            <div className="absolute h-full bg-[var(--accent)]" style={{ width: `${progressPercent}%` }} />
+            <div className="absolute w-3 h-3 bg-[var(--accent)] top-1/2 -translate-y-1/2 opacity-0 group-hover/progress:opacity-100 transition-opacity" style={{ left: `calc(${progressPercent}% - 6px)` }} />
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="p-1.5 text-white hover:text-[var(--accent)] cursor-pointer transition-colors rounded-full" onClick={togglePlay}>
+          <div className="flex items-center gap-1 sm:gap-3">
+            <button className="p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors" onClick={togglePlay}>
               {isPlaying ? <Pause className="w-5 h-5" fill="currentColor" /> : <Play className="w-5 h-5" fill="currentColor" />}
             </button>
 
-            <button className="p-1.5 text-white hover:text-[var(--accent)] cursor-pointer transition-colors rounded-full" onClick={() => skip(-10)}>
+            {/* Phones skip with a double tap, so the buttons give their room to the time readout. */}
+            <button className="hidden sm:inline-flex items-center gap-0.5 p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors" aria-label="Back 10 seconds" onClick={() => skip(-10)}>
               <span className="text-xs ml-0.5">10</span>
               <SkipBack className="w-4 h-4" />
             </button>
 
-            <button className="p-1.5 text-white hover:text-[var(--accent)] cursor-pointer transition-colors rounded-full" onClick={() => skip(10)}>
+            <button className="hidden sm:inline-flex items-center gap-0.5 p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors" aria-label="Forward 10 seconds" onClick={() => skip(10)}>
               <span className="text-xs mr-0.5">10</span>
               <SkipForward className="w-4 h-4" />
             </button>
 
-            <span className="text-white text-xs font-mono">
+            <span className="text-[var(--r7)] text-xs tabular whitespace-nowrap">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
 
             <div className="flex-1" />
 
             <div className="flex items-center gap-1">
-              <button className="p-1.5 text-white hover:text-[var(--accent)] cursor-pointer transition-colors rounded-full" onClick={toggleMute}>
+              <button className="p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors" onClick={toggleMute}>
                 {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : volume < 0.5 ? <Volume1 className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
               <input
@@ -1155,7 +1165,7 @@ const initHls = useCallback(() => {
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-16 h-1 accent-[var(--accent)] cursor-pointer"
+                className="hidden sm:block w-16 h-1 accent-[var(--accent)] cursor-pointer"
               />
             </div>
 
@@ -1163,17 +1173,17 @@ const initHls = useCallback(() => {
             {subOptions.length > 0 && (
               <div className="relative">
                 <button
-                  className={`p-1.5 rounded-full cursor-pointer transition-colors ${selectedSubtitle >= 0 ? 'text-[var(--accent)]' : 'text-white hover:text-[var(--accent)]'}`}
+                  className={`p-1.5  cursor-pointer transition-colors ${selectedSubtitle >= 0 ? 'text-[var(--accent)]' : 'text-[var(--r7)] hover:text-[var(--accent)]'}`}
                   onClick={(e) => { e.stopPropagation(); setShowSubtitleMenu(v => !v); }}
                   title="Subtitles (C)"
                 >
                   <Subtitles className="w-4 h-4" />
                 </button>
                 {showSubtitleMenu && (
-                  <div className="absolute bottom-full right-0 mb-2 glass-panel cursor-pointer rounded-2xl z-50 p-2 shadow-lg min-w-[140px] max-w-[220px]" onClick={(e) => e.stopPropagation()}>
+                  <div className="absolute bottom-full right-0 mb-2 glass-panel cursor-pointer z-50 p-2 min-w-[140px] max-w-[220px]" onClick={(e) => e.stopPropagation()}>
                     <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide px-2 pb-1">Subtitles</div>
                     <button
-                      className={`block w-full text-left px-3 py-1.5 text-sm rounded-full transition-colors ${selectedSubtitle === -1 ? 'bg-[var(--accent)] text-white font-bold' : 'text-[var(--text-secondary)] hover:bg-white/[0.06]'}`}
+                      className={`block w-full text-left px-3 py-1.5 text-sm  transition-colors ${selectedSubtitle === -1 ? 'bg-[var(--accent)] text-[var(--r0)] ' : 'text-[var(--text-secondary)] hover:bg-[var(--r3)]'}`}
                       onClick={() => selectSubtitle(-1)}
                     >
                       Off
@@ -1183,7 +1193,7 @@ const initHls = useCallback(() => {
                       return (
                         <button
                           key={opt.key}
-                          className={`block w-full text-left px-3 py-1.5 text-sm rounded-full transition-colors truncate ${selectedSubtitle === i ? 'bg-[var(--accent)] text-white font-bold' : 'text-[var(--text-secondary)] hover:bg-white/[0.06]'}`}
+                          className={`block w-full text-left px-3 py-1.5 text-sm  transition-colors truncate ${selectedSubtitle === i ? 'bg-[var(--accent)] text-[var(--r0)] ' : 'text-[var(--text-secondary)] hover:bg-[var(--r3)]'}`}
                           onClick={() => selectSubtitle(i)}
                           title={failed ? `${opt.label} (failed to load)` : opt.label}
                         >
@@ -1200,20 +1210,20 @@ const initHls = useCallback(() => {
             {/* Speed control */}
             <div className="relative">
               <button
-                className="p-1.5 text-white hover:text-[var(--accent)] cursor-pointer transition-colors rounded-full gap-0.5"
+                className="p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors gap-0.5"
                 onClick={(e) => { e.stopPropagation(); setShowSpeedMenu(v => !v); }}
                 title="Playback speed (< >)"
               >
                 <Gauge className="w-4 h-4" />
-                {playbackRate !== 1 && <span className="text-[10px] font-bold ml-0.5">{playbackRate}x</span>}
+                {playbackRate !== 1 && <span className="text-[10px] ml-0.5">{playbackRate}x</span>}
               </button>
               {showSpeedMenu && (
-                <div className="absolute bottom-full right-0 mb-2 glass-panel rounded-2xl z-50 p-2 shadow-lg min-w-[80px]" onClick={(e) => e.stopPropagation()}>
+                <div className="absolute bottom-full right-0 mb-2 glass-panel z-50 p-2 min-w-[80px]" onClick={(e) => e.stopPropagation()}>
                   <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide px-2 pb-1">Speed</div>
                   {speeds.map(s => (
                     <button
                       key={s}
-                      className={`block w-full text-left px-3 py-1.5 text-sm rounded-full transition-colors ${playbackRate === s ? 'bg-[var(--accent)] text-white font-bold' : 'text-[var(--text-secondary)] hover:bg-white/[0.06]'}`}
+                      className={`block w-full text-left px-3 py-1.5 text-sm  transition-colors ${playbackRate === s ? 'bg-[var(--accent)] text-[var(--r0)] ' : 'text-[var(--text-secondary)] hover:bg-[var(--r3)]'}`}
                       onClick={() => changePlaybackRate(s)}
                     >
                       {s === 1 ? 'Normal' : `${s}x`}
@@ -1224,33 +1234,41 @@ const initHls = useCallback(() => {
             </div>
 
             {availableLevels.length > 1 && (
-              <div className="dropdown dropdown-top">
-                <button tabIndex={0} className="p-1.5 text-white hover:text-[var(--accent)] transition-colors rounded-full text-xs font-semibold">
+              <div className="relative">
+                <button
+                  className="p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors text-xs"
+                  onClick={(e) => { e.stopPropagation(); setShowQualityMenu(v => !v); }}
+                  title="Quality"
+                >
                   {quality === -1 ? 'Auto' : `${availableLevels[quality]?.height || '?'}p`}
                 </button>
-                <ul tabIndex={0} className="dropdown-content menu glass-panel rounded-2xl z-50 w-32 p-2 shadow-lg">
-                  <li><a onClick={() => changeQuality(-1)} className={quality === -1 ? 'text-[var(--accent)] font-bold' : ''}>Auto</a></li>
-                  {availableLevels.map((level) => (
-                    <li key={level.index}>
-                      <a onClick={() => changeQuality(level.index)} className={quality === level.index ? 'text-[var(--accent)] font-bold' : ''}>
-                        {level.height}p
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                {showQualityMenu && (
+                  <div className="absolute bottom-full right-0 mb-2 glass-panel z-50 p-2 w-32" onClick={(e) => e.stopPropagation()}>
+                    <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide px-2 pb-1">Quality</div>
+                    {[{ index: -1, label: 'Auto' }, ...availableLevels.map((l) => ({ index: l.index, label: `${l.height}p` }))].map((opt) => (
+                      <button
+                        key={opt.index}
+                        className={`block w-full text-left px-3 py-1.5 text-sm  transition-colors ${quality === opt.index ? 'bg-[var(--accent)] text-[var(--r0)] ' : 'text-[var(--text-secondary)] hover:bg-[var(--r3)]'}`}
+                        onClick={() => changeQuality(opt.index)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* PiP toggle */}
             <button
-              className="p-1.5 text-white hover:text-[var(--accent)] cursor-pointer transition-colors rounded-full"
+              className="p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors"
               onClick={togglePip}
               title="Picture in Picture (P)"
             >
               {isPip ? <PictureInPicture2 className="w-4 h-4" /> : <PictureInPicture className="w-4 h-4" />}
             </button>
 
-            <button className="p-1.5 text-white hover:text-[var(--accent)] cursor-pointer transition-colors rounded-full" onClick={toggleFullscreen}>
+            <button className="p-1.5 text-[var(--r7)] hover:text-[var(--accent)] cursor-pointer transition-colors" onClick={toggleFullscreen}>
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
           </div>
@@ -1258,10 +1276,10 @@ const initHls = useCallback(() => {
       </div>
 
       {title && (
-        <div className={`absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 ${
+        <div className={`hidden sm:block absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-[var(--r0)] to-transparent transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0'
         }`}>
-          <h2 className="text-white text-lg font-semibold">{title}</h2>
+          <h2 className="text-[var(--r7)] text-lg line-clamp-1">{title}</h2>
         </div>
       )}
     </div>

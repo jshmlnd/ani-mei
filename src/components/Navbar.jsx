@@ -2,27 +2,20 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { searchAnime, getDisplayTitle } from '../api/apiService';
 import { searchManhwa } from '../api/manhwaService';
-import animeiLogo from '../assets/animeiV2.png';
-import { Search, Menu, X, Heart, BookOpen, Clapperboard } from 'lucide-react';
+import Wordmark from './Wordmark';
+import { Search, Menu, X, BookOpen, Clapperboard } from '@/components/icons';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [mangaSuggestions, setMangaSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
   const requestRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -91,7 +84,7 @@ export default function Navbar() {
       const linkParams = new URLSearchParams(to.split('?')[1] || '');
       return params.get('type') === linkParams.get('type');
     }
-    return location.pathname === path;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const navLinks = [
@@ -100,27 +93,18 @@ export default function Navbar() {
     { to: '/browse?type=NEW', label: 'Latest' },
     { to: '/browse?type=TOP', label: 'Completed' },
     { to: '/manhwa', label: 'Manhwa' },
+    { to: '/genres', label: 'Genres' },
   ];
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-350 ${
-        isScrolled
-          ? 'glass-panel shadow-lg shadow-black/20'
-          : 'bg-transparent'
-      }`}
-      style={isScrolled ? { borderBottom: '1px solid rgba(var(--accent-rgb), 0.1)' } : {}}
+      className="fixed top-0 left-0 right-0 z-50 bg-[var(--r2)] border-b-4 border-[var(--r0)]"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 shrink-0 group">
-            <img
-              src={animeiLogo}
-              alt="AniMei"
-              className="h-7 transition-transform duration-300 group-hover:scale-110"
-            />
-            <Heart className="w-3.5 h-3.5 text-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-heart-beat" fill="currentColor" />
+            <Wordmark className="text-[26px]" />
           </Link>
 
           {/* Desktop Nav */}
@@ -129,15 +113,15 @@ export default function Navbar() {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`relative px-4 py-2 text-sm font-semibold rounded-full transition-all duration-300 ${
+                className={`relative px-4 py-2 text-sm   transition-all duration-300 ${
                   isActive(link.to)
-                    ? 'text-[var(--accent)] bg-[var(--accent)]/10'
-                    : 'text-[var(--text-secondary)] hover:text-white hover:bg-white/[0.05]'
+                    ? 'text-[var(--accent)] bg-[var(--r3)]'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--r7)] '
                 }`}
               >
                 {link.label}
                 {isActive(link.to) && (
-                  <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-5 h-1 rounded-full bg-[var(--accent)]" />
+                  <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-5 h-1 bg-[var(--accent)]" />
                 )}
               </Link>
             ))}
@@ -151,13 +135,13 @@ export default function Navbar() {
                 <input
                   type="text"
                   placeholder="Search anime, manga..."
-                  className="w-44 lg:w-56 pl-10 pr-10 py-2.5 text-sm bg-white/[0.04] border border-[var(--border-subtle)] rounded-full outline-none text-white placeholder-[var(--text-muted)] focus:border-[var(--accent)]/40 focus:bg-white/[0.06] focus:rounded-full focus:shadow-[0_0_0_4px_rgba(var(--accent-rgb),0.08)] transition-all duration-300"
+                  className="w-44 lg:w-56 pl-10 pr-10 py-2.5 text-sm border border-[var(--border-subtle)] outline-none text-[var(--r7)] placeholder-[var(--text-muted)] focus:border-[var(--accent)] focus:bg-[var(--r3)] transition-all duration-300"
                   value={searchQuery}
                   onChange={handleSearchChange}
                   onFocus={() => searchQuery.trim().length >= 2 && setShowSuggestions(true)}
                 />
                 {!searchQuery && (
-                  <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] bg-white/[0.06] border border-[var(--border-subtle)] rounded-full pointer-events-none">
+                  <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--r3)] border border-[var(--border-subtle)] pointer-events-none">
                     /
                   </kbd>
                 )}
@@ -166,17 +150,17 @@ export default function Navbar() {
 
             {/* Suggestions — anime + manga/manhwa */}
             {showSuggestions && (suggestions.length > 0 || mangaSuggestions.length > 0) && (
-              <div className="absolute top-full right-0 mt-2 w-80 max-h-[70vh] overflow-y-auto glass-panel rounded-2xl shadow-2xl shadow-black/40 z-50 animate-slide-in-down" style={{ animationDuration: '0.25s' }}>
+              <div className="absolute top-full right-0 mt-2 w-80 max-h-[70vh] overflow-y-auto glass-panel z-50 animate-slide-in-down" style={{ animationDuration: '0.25s' }}>
                 {suggestions.length > 0 && (
                   <>
-                    <p className="flex items-center gap-1.5 px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                    <p className="flex items-center gap-1.5 px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
                       <Clapperboard className="w-3 h-3" />
                       Anime
                     </p>
                     {suggestions.map((anime) => (
                       <button
                         key={anime.id}
-                        className="flex items-center gap-3 w-full p-3 hover:bg-[var(--accent)]/[0.06] cursor-pointer transition-colors text-left border-b border-[var(--border-subtle)] last:border-0"
+                        className="flex items-center gap-3 w-full p-3 hover:bg-[var(--r3)] cursor-pointer transition-colors text-left border-b border-[var(--border-subtle)] last:border-0"
                         onClick={() => {
                           setShowSuggestions(false);
                           setSearchQuery('');
@@ -187,11 +171,11 @@ export default function Navbar() {
                         <img
                           src={anime.coverImage?.medium || anime.coverImage?.large || anime.poster}
                           alt=""
-                          className="w-10 h-14 object-cover rounded-xl"
+                          className="w-10 h-14 object-cover"
                           loading="lazy"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{getDisplayTitle(anime)}</p>
+                          <p className="text-sm text-[var(--r7)] truncate">{getDisplayTitle(anime)}</p>
                           <p className="text-xs text-[var(--text-muted)]">
                             {String(anime.format || anime.type || '').replace('_', ' ')} {anime.episodes && `\u00B7 ${anime.episodes} eps`}
                           </p>
@@ -202,14 +186,14 @@ export default function Navbar() {
                 )}
                 {mangaSuggestions.length > 0 && (
                   <>
-                    <p className="flex items-center gap-1.5 px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                    <p className="flex items-center gap-1.5 px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
                       <BookOpen className="w-3 h-3" />
                       Manga & Manhwa
                     </p>
                     {mangaSuggestions.map((manga) => (
                       <button
                         key={manga.id}
-                        className="flex items-center gap-3 w-full p-3 hover:bg-[var(--accent)]/[0.06] cursor-pointer transition-colors text-left border-b border-[var(--border-subtle)] last:border-0"
+                        className="flex items-center gap-3 w-full p-3 hover:bg-[var(--r3)] cursor-pointer transition-colors text-left border-b border-[var(--border-subtle)] last:border-0"
                         onClick={() => {
                           setShowSuggestions(false);
                           setSearchQuery('');
@@ -221,11 +205,11 @@ export default function Navbar() {
                           src={manga.thumbnail || manga.image}
                           alt=""
                           referrerPolicy="no-referrer"
-                          className="w-10 h-14 object-cover rounded-xl"
+                          className="w-10 h-14 object-cover"
                           loading="lazy"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{manga.title}</p>
+                          <p className="text-sm text-[var(--r7)] truncate">{manga.title}</p>
                           <p className="text-xs text-[var(--text-muted)] truncate">
                             {[manga.type, manga.status, manga.latestChapter].filter(Boolean).join(' · ') || 'Manhwa'}
                           </p>
@@ -237,14 +221,14 @@ export default function Navbar() {
                 <div className="flex border-t border-[var(--border-subtle)]">
                   <Link
                     to={`/search?keyw=${encodeURIComponent(searchQuery.trim())}`}
-                    className="flex-1 block p-3 text-center text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/[0.06] transition-colors"
+                    className="flex-1 block p-3 text-center text-sm text-[var(--accent)] hover:bg-[var(--r3)] transition-colors"
                     onClick={() => setShowSuggestions(false)}
                   >
                     Anime results
                   </Link>
                   <Link
                     to={`/search?keyw=${encodeURIComponent(searchQuery.trim())}&tab=manhwa`}
-                    className="flex-1 block p-3 text-center text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/[0.06] border-l border-[var(--border-subtle)] transition-colors"
+                    className="flex-1 block p-3 text-center text-sm text-[var(--accent)] hover:bg-[var(--r3)] border-l border-[var(--border-subtle)] transition-colors"
                     onClick={() => setShowSuggestions(false)}
                   >
                     Manga results
@@ -256,14 +240,14 @@ export default function Navbar() {
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden p-2 rounded-full hover:bg-white/[0.06] transition-colors"
+            className="md:hidden p-2 hover:bg-[var(--r3)] transition-colors"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Toggle menu"
           >
             {mobileOpen ? (
-              <X className="w-5 h-5 text-white" />
+              <X className="w-5 h-5 text-[var(--r7)]" />
             ) : (
-              <Menu className="w-5 h-5 text-white" />
+              <Menu className="w-5 h-5 text-[var(--r7)]" />
             )}
           </button>
         </div>
@@ -277,10 +261,10 @@ export default function Navbar() {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`block px-4 py-2.5 text-sm font-semibold rounded-full transition-all ${
+                className={`block px-4 py-2.5 text-sm   transition-all ${
                   isActive(link.to)
-                    ? 'text-[var(--accent)] bg-[var(--accent)]/10'
-                    : 'text-[var(--text-secondary)] hover:text-white hover:bg-white/[0.05]'
+                    ? 'text-[var(--accent)] bg-[var(--r3)]'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--r7)] '
                 }`}
                 onClick={() => setMobileOpen(false)}
               >

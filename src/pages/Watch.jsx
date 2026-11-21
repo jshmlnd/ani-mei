@@ -1,3 +1,8 @@
+import { recordEpisode, progressFor } from '@/lib/progress';
+import ScoreBead from '../components/ScoreBead';
+import { GradientHeading } from '@/components/ui/gradient-heading';
+import { TextureButton } from '@/components/ui/texture-button';
+import { TextureCard } from '@/components/ui/texture-card';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -12,7 +17,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import EpisodeSelector from '../components/EpisodeSelector';
 import ServerSelector from '../components/ServerSelector';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { AlertCircle, AlertTriangle, CircleOff } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CircleOff, ChevronLeft, ChevronRight } from '@/components/icons';
 
 export default function Watch() {
   const { id } = useParams();
@@ -34,7 +39,8 @@ export default function Watch() {
       try {
         setLoading(true);
         setError(null);
-        setEpisode(1);
+        // ?ep=N resumes a show from the Continue row
+        setEpisode(Math.max(1, parseInt(new URLSearchParams(window.location.search).get('ep'), 10) || 1));
         setTrack('sub');
         setStream(null);
         setStreamError(null);
@@ -49,6 +55,21 @@ export default function Watch() {
     if (id) fetchAnime();
     return () => { cancelled = true; };
   }, [id]);
+
+  // Remember which episodes were opened, for the bead strips and Continue row.
+  useEffect(() => {
+    if (!anime) return;
+    recordEpisode(id, {
+      episode,
+      total: getEpisodeCount(anime),
+      title: getDisplayTitle(anime),
+      poster: anime.coverImage?.large || anime.poster,
+    });
+  }, [anime, episode, id]);
+  const seenEpisodes = useMemo(
+    () => [...new Set([...(progressFor(id)?.seen || []), episode])],
+    [id, episode]
+  );
 
   const totalEpisodes = anime ? getEpisodeCount(anime) : 0;
 
@@ -146,7 +167,7 @@ export default function Watch() {
       <AlertCircle className="w-16 h-16 text-[var(--text-muted)]" />
       <p className="text-lg text-[var(--text-secondary)]">{error}</p>
       <button
-        className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all duration-300"
+        className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-[var(--r0)] text-sm transition-all duration-300"
         onClick={() => navigate('/')}
       >
         Go Home
@@ -169,30 +190,30 @@ export default function Watch() {
           <div className="space-y-5">
             {/* Video Player */}
             {streamLoading ? (
-              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-2xl flex items-center justify-center border border-[var(--border-subtle)]">
+              <div className="w-full aspect-video bg-[var(--bg-surface)] flex items-center justify-center border border-[var(--border-subtle)]">
                 <div className="text-center">
-                  <div className="w-10 h-10 mx-auto rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
+                  <div className="flex justify-center items-end gap-1.5 h-5" aria-hidden="true">{[0, 1, 2, 3].map((i) => <span key={i} className="bead bead-drop" style={{ animationDelay: `${i * 0.16}s` }} />)}</div>
                   <p className="text-sm text-[var(--text-muted)] mt-3">Loading stream...</p>
                 </div>
               </div>
             ) : streamError ? (
-              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-2xl flex items-center justify-center border border-[var(--border-subtle)]">
+              <div className="w-full aspect-video bg-[var(--bg-surface)] flex items-center justify-center border border-[var(--border-subtle)]">
                 <div className="text-center px-4">
-                  <AlertTriangle className="w-14 h-14 mx-auto text-red-400/50 mb-3" />
-                  <p className="text-sm text-red-400/80 font-medium">{streamError}</p>
+                  <AlertTriangle className="w-14 h-14 mx-auto text-[var(--error)] mb-3" />
+                  <p className="text-sm text-[var(--error)]">{streamError}</p>
                   <p className="text-xs text-[var(--text-muted)] mt-1">Try a different track or episode</p>
                 </div>
               </div>
             ) : !hasStream ? (
-              <div className="w-full aspect-video bg-[var(--bg-surface)] rounded-2xl flex items-center justify-center border border-[var(--border-subtle)]">
+              <div className="w-full aspect-video bg-[var(--bg-surface)] flex items-center justify-center border border-[var(--border-subtle)]">
                 <div className="text-center px-4">
-                  <CircleOff className="w-14 h-14 mx-auto text-red-400/50 mb-3" />
-                  <p className="text-sm text-red-400/80 font-medium">Stream unavailable for this episode</p>
+                  <CircleOff className="w-14 h-14 mx-auto text-[var(--error)] mb-3" />
+                  <p className="text-sm text-[var(--error)]">Stream unavailable for this episode</p>
                   <p className="text-xs text-[var(--text-muted)] mt-1">Try selecting a different episode</p>
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl overflow-hidden border border-[var(--border-subtle)]">
+              <div className="overflow-hidden border border-[var(--border-subtle)]">
                 <VideoPlayer
                   key={`${anime.id}-${episode}-${effectiveTrack}`}
                   src={stream.m3u8}
@@ -208,26 +229,24 @@ export default function Watch() {
 
             {/* Episode Navigation */}
             <div className="grid grid-cols-2 gap-3 mt-3">
-              <button
-                type="button"
+              <TextureButton
+                variant="secondary"
                 disabled={!hasPrevEpisode}
                 onClick={goToPrevEpisode}
-                className="btn btn-dash rounded-full border-[var(--accent)]/80 text-[var(--accent)] hover:bg-[var(--accent)]/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
-                Previous Episode
-              </button>
-              <button
-                type="button"
+                <ChevronLeft className="w-4 h-4" /> Previous Episode
+              </TextureButton>
+              <TextureButton
+                variant="accent"
                 disabled={!hasNextEpisode}
                 onClick={goToNextEpisode}
-                className="btn btn-dash rounded-full border-[var(--accent)]/80 text-[var(--accent)] hover:bg-[var(--accent)]/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
-                Next Episode
-              </button>
+                Next Episode <ChevronRight className="w-4 h-4" />
+              </TextureButton>
             </div>
 
             {/* Server Selector */}
-            <div className="glass-panel rounded-2xl p-5">
+            <TextureCard><div className="p-5">
               <ServerSelector
                 servers={servers}
                 selected={selectedServer}
@@ -239,30 +258,24 @@ export default function Watch() {
                 error={null}
               />
               {anime.aniId && (
-                <p className="mt-3 text-[10px] text-[var(--text-muted)]/50 truncate">
+                <p className="mt-3 text-[10px] text-[var(--text-muted)] truncate">
                   AniList #{anime.aniId}{anime.malId ? ` · MAL #${anime.malId}` : ''}
                 </p>
               )}
-            </div>
+            </div></TextureCard>
 
             {/* Episode Info */}
-            <div className="glass-panel rounded-2xl p-5">
-              <div className="flex items-center gap-2 text-sm mb-3">
-                <span className="px-3 py-1.5 text-xs font-bold bg-[var(--accent)]/15 text-[var(--accent)] rounded-full border border-[var(--accent)]/20">
-                  EP {episode}
-                </span>
-                <span className="text-[var(--text-muted)]">/ {totalEpisodes} Episodes</span>
-              </div>
-              <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">{title}</h1>
+            <TextureCard><div className="p-5">
+              <GradientHeading as="h1" variant="animei" size="xs" className="leading-tight">{title}</GradientHeading>
               {anime.title?.romaji && anime.title?.romaji !== title && (
-                <p className="text-sm text-[var(--accent)]/60 mt-1">{anime.title.romaji}</p>
+                <p className="text-sm text-[var(--accent)] mt-1">{anime.title.romaji}</p>
               )}
 
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {anime.genres?.map((genre) => {
                   const g = typeof genre === 'string' ? genre : genre?.name;
                   return (
-                    <span key={g} className="px-3 py-1 text-xs font-medium bg-[var(--accent)]/[0.08] text-[var(--accent)]/80 rounded-full border border-[var(--accent)]/[0.15]">
+                    <span key={g} className="px-3 py-1 text-xs bg-[var(--r3)] text-[var(--accent)] border border-[var(--r4)]">
                       {g}
                     </span>
                   );
@@ -270,13 +283,13 @@ export default function Watch() {
               </div>
 
               {relations.length > 0 && (
-                <div className="mt-4 p-3 bg-[var(--accent)]/[0.03] rounded-xl border border-[var(--accent)]/[0.08]">
-                  <p className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">Related</p>
+                <div className="mt-4 p-3 border border-[var(--r4)]">
+                  <p className="text-xs text-[var(--text-muted)] mb-2 uppercase tracking-wider">Related</p>
                   <div className="flex flex-wrap gap-2">
                     {relations.map((rel) => (
                       <button
                         key={rel.node.id}
-                        className="px-3 py-1 text-xs font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/10 rounded-full border border-[var(--accent)]/20 transition-all duration-200"
+                        className="px-3 py-1 text-xs text-[var(--accent)] hover:bg-[var(--r3)] border border-[var(--r4)] transition-all duration-200"
                         onClick={() => navigate(`/anime/ani-${rel.node.id}`)}
                       >
                         {rel.relationType}: {rel.node.title?.english || rel.node.title?.romaji}
@@ -285,91 +298,92 @@ export default function Watch() {
                   </div>
                 </div>
               )}
-            </div>
+            </div></TextureCard>
 
             {/* Episode Selector */}
-            <div className="glass-panel rounded-2xl p-5">
-              <h3 className="font-bold text-white mb-3 text-sm uppercase tracking-wider">Episodes</h3>
+            <TextureCard><div className="p-5">
+              <h3 className="text-[var(--r7)] mb-3 text-sm uppercase tracking-wider tabular">Episode {episode} of {totalEpisodes}</h3>
               <EpisodeSelector
                 totalEpisodes={totalEpisodes}
                 currentEpisode={episode}
+                seen={seenEpisodes}
                 onEpisodeChange={handleEpisodeChange}
               />
-            </div>
+            </div></TextureCard>
 
             {/* Synopsis */}
-            <div className="glass-panel rounded-2xl p-5">
-              <h3 className="font-bold text-white mb-3 text-sm uppercase tracking-wider">Synopsis</h3>
+            <TextureCard><div className="p-5">
+              <h3 className="text-[var(--r7)] mb-3 text-sm uppercase tracking-wider">Synopsis</h3>
               <p className={`text-sm text-[var(--text-secondary)] leading-relaxed ${!showFullDesc ? 'line-clamp-4' : ''}`}>
                 {description}
               </p>
               {description.length > 300 && (
                 <button
-                  className="mt-2 text-xs font-semibold text-[var(--accent)] cursor-pointer hover:text-white transition-colors duration-200"
+                  className="mt-2 text-xs text-[var(--accent)] cursor-pointer hover:text-[var(--r7)] transition-colors duration-200"
                   onClick={() => setShowFullDesc(!showFullDesc)}
                 >
                   {showFullDesc ? 'Show less' : 'Read more'}
                 </button>
               )}
-            </div>
+            </div></TextureCard>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-4">
-            <div className="glass-panel rounded-2xl p-5 top-20">
-              <h3 className="font-bold text-white mb-4 text-sm uppercase tracking-wider">Anime Details</h3>
+            <TextureCard className="top-20"><div className="p-5">
+              <h3 className="text-[var(--r7)] mb-4 text-sm uppercase tracking-wider">Anime Details</h3>
               <div className="space-y-4">
                 {(anime.coverImage?.large || anime.poster) && (
-                  <div className="relative rounded-xl overflow-hidden">
+                  <div className="relative overflow-hidden">
                     <img
                       src={anime.coverImage?.large || anime.poster}
                       alt={title}
                       className="w-full aspect-[3/4] object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[var(--r0)] to-transparent" />
                   </div>
                 )}
                 <div className="space-y-2.5 text-sm">
                   {(anime.format || anime.type) && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Format</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{String(anime.format || anime.type).replace('_', ' ')}</span>
+                      <span className="text-[var(--text-secondary)]">{String(anime.format || anime.type).replace('_', ' ')}</span>
                     </div>
                   )}
                   {anime.status && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Status</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{anime.status}</span>
+                      <span className="text-[var(--text-secondary)]">{anime.status}</span>
                     </div>
                   )}
                   {totalEpisodes > 0 && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Episodes</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{totalEpisodes}</span>
+                      <span className="text-[var(--text-secondary)]">{totalEpisodes}</span>
                     </div>
                   )}
                   {anime.season && anime.seasonYear && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Season</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{anime.season.charAt(0) + anime.season.slice(1).toLowerCase()} {anime.seasonYear}</span>
+                      <span className="text-[var(--text-secondary)]">{anime.season.charAt(0) + anime.season.slice(1).toLowerCase()} {anime.seasonYear}</span>
                     </div>
                   )}
                   {anime.startDate?.year && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Aired</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{formatDate(anime.startDate)}</span>
+                      <span className="text-[var(--text-secondary)]">{formatDate(anime.startDate)}</span>
                     </div>
                   )}
                   {anime.averageScore && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Score</span>
-                      <span className="text-amber-400 font-bold">{anime.averageScore}%</span>
+                      <ScoreBead score={anime.averageScore} className="text-[var(--r7)]" />
                     </div>
                   )}
                   {anime.studios?.nodes?.[0] && (
                     <div className="flex justify-between">
                       <span className="text-[var(--text-muted)]">Studio</span>
-                      <span className="text-[var(--text-secondary)] font-medium">{anime.studios.nodes[0].name}</span>
+                      <span className="text-[var(--text-secondary)]">{anime.studios.nodes[0].name}</span>
                     </div>
                   )}
                 </div>
@@ -377,18 +391,18 @@ export default function Watch() {
 
               {anime.characters?.nodes?.length > 0 && (
                 <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">
-                  <h4 className="font-bold text-sm text-white mb-3 uppercase tracking-wider">Characters</h4>
+                  <h4 className="text-sm text-[var(--r7)] mb-3 uppercase tracking-wider">Characters</h4>
                   <div className="space-y-2.5">
                     {anime.characters.nodes.map((char, idx) => (
-                      <div key={idx} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-[var(--accent)]/[0.05] transition-colors duration-200">
+                      <div key={idx} className="flex items-center gap-2.5 p-2 transition-colors duration-200">
                         <img
                           src={char.image?.large}
                           alt={char.name?.full}
-                          className="w-9 h-9 rounded-full object-cover ring-2 ring-[var(--accent)]/20"
+                          className="w-9 h-9 object-cover ring-2 ring-[var(--accent)]"
                           loading="lazy"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-white truncate">{char.name?.full}</p>
+                          <p className="text-xs text-[var(--r7)] truncate">{char.name?.full}</p>
                           <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Main</p>
                         </div>
                       </div>
@@ -396,7 +410,7 @@ export default function Watch() {
                   </div>
                 </div>
               )}
-            </div>
+            </div></TextureCard>
           </div>
         </div>
       </div>

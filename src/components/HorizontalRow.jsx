@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from '@/components/icons';
 
 export default function HorizontalRow({ children }) {
   const scrollRef = useRef(null);
@@ -112,7 +112,7 @@ export default function HorizontalRow({ children }) {
       </div>
       <button
         type="button"
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-black/90 hover:scale-110"
+        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-[var(--r0)] text-[var(--r7)] flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-[var(--r3)]"
         onClick={() => scroll(-1)}
         aria-label="Scroll left"
       >
@@ -120,7 +120,7 @@ export default function HorizontalRow({ children }) {
       </button>
       <button
         type="button"
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-black/70 backdrop-blur-sm text-white flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-black/90 hover:scale-110"
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-[var(--r0)] text-[var(--r7)] flex items-center justify-center opacity-0 group-hover/scroll:opacity-100 transition-all duration-300 hover:bg-[var(--r3)]"
         onClick={() => scroll(1)}
         aria-label="Scroll right"
       >
