@@ -1,11 +1,13 @@
-export default function LoadingSpinner() {
+// Loading: five beads drop onto the peg row one after another.
+export default function LoadingSpinner({ label = 'Loading…' }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4">
-      <div className="relative">
-        <div className="w-12 h-12 rounded-full border-3 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
-        <div className="absolute inset-0 w-12 h-12 rounded-full border-3 border-transparent border-b-[var(--accent-deep)]/30 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+    <div className="flex flex-col items-center justify-center py-24 gap-4" role="status">
+      <div className="flex items-end gap-2 h-6" aria-hidden="true">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <span key={i} className="bead bead-drop" style={{ animationDelay: `${i * 0.16}s` }} />
+        ))}
       </div>
-      <p className="text-xs text-[var(--text-muted)] font-semibold">Loading...</p>
+      <p className="text-sm text-[var(--r5)]">{label}</p>
     </div>
   );
 }

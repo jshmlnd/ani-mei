@@ -1,3 +1,5 @@
+import { TextureButton } from '@/components/ui/texture-button';
+import { TextureCard } from '@/components/ui/texture-card';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -13,7 +15,7 @@ import {
   ChevronRight,
   AlertCircle,
   ImageIcon,
-} from 'lucide-react';
+} from '@/components/icons';
 
 const QUALITY_KEY = 'animei-reader-quality';
 const MAX_CHAPTER_PAGES = 25; // 25 x 100 chapters cap for prev/next navigation
@@ -64,7 +66,7 @@ function ReaderPage({ src, alt, eager }) {
           </p>
           <button
             onClick={retryAll}
-            className="mt-3 px-4 py-1.5 text-xs font-bold rounded-full border border-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-all"
+            className="mt-3 px-4 py-1.5 text-xs border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--r3)] transition-all"
           >
             Retry page
           </button>
@@ -76,7 +78,7 @@ function ReaderPage({ src, alt, eager }) {
   if (waiting) {
     return (
       <div className="w-full aspect-[3/4] bg-[var(--bg-elevated)] flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-[var(--accent)]/20 border-t-[var(--accent)] animate-spin" />
+        <div className="flex items-end gap-1.5 h-5" aria-hidden="true">{[0, 1, 2, 3].map((i) => <span key={i} className="bead bead-drop" style={{ animationDelay: `${i * 0.16}s` }} />)}</div>
       </div>
     );
   }
@@ -235,7 +237,7 @@ export default function ManhwaRead() {
         <p className="text-lg text-[var(--text-secondary)]">Invalid chapter link.</p>
         <button
           onClick={() => navigate('/manhwa')}
-          className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all"
+          className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-[var(--r0)] text-sm transition-all"
         >
           Back to Manhwa
         </button>
@@ -251,18 +253,18 @@ export default function ManhwaRead() {
           <button
             onClick={() => navigate(hid ? `/manhwa?title=${encodeURIComponent(hid)}` : '/manhwa')}
             aria-label="Back to Manhwa"
-            className="p-2 rounded-full hover:bg-white/[0.06] text-[var(--text-secondary)] hover:text-white transition-colors shrink-0"
+            className="p-2 hover:bg-[var(--r3)] text-[var(--text-secondary)] hover:text-[var(--r7)] transition-colors shrink-0"
           >
             <ArrowLeft size={18} />
           </button>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-white truncate badge badge-soft rounded-full glass">{loadingMeta ? 'Loading...' : title || 'Manhwa'}</div>
+            <div className="text-sm text-[var(--r7)] truncate">{loadingMeta ? 'Loading...' : title || 'Manhwa'}</div>
             <p className="text-[11px] text-[#a188ad]">
               {chapter ? chapterLabel(chapter) : 'Chapter'}
               {(total ?? chaptersAsc.length) > 0 && ` · ${idx >= 0 ? idx + 1 : '–'} / ${total ?? chaptersAsc.length}`}
             </p>
           </div>
-          <div className="flex items-center gap-1 p-1 rounded-full glass border border-[var(--border-subtle)] shrink-0">
+          <div className="flex items-center gap-1 p-1 glass-panel-light shrink-0">
             {[
               { v: 'dataSaver', label: 'Saver' },
               { v: 'high', label: 'HD' },
@@ -270,10 +272,10 @@ export default function ManhwaRead() {
               <button
                 key={q.v}
                 onClick={() => changeQuality(q.v)}
-                className={`px-3 py-1 text-[11px] font-bold rounded-full transition-all ${
+                className={`px-3 py-1 text-[11px]   transition-all ${
                   quality === q.v
-                    ? 'bg-[var(--accent)] text-white'
-                    : 'text-[#a188ad] hover:text-white'
+                    ? 'bg-[var(--accent)] text-[var(--r0)]'
+                    : 'text-[#a188ad] hover:text-[var(--r7)]'
                 }`}
               >
                 {q.label}
@@ -289,12 +291,12 @@ export default function ManhwaRead() {
           <LoadingSpinner />
         ) : error || (!pages.length && pagesInfo?.readable !== false) ? (
           <div className="text-center py-24 px-6">
-            <AlertCircle className="w-16 h-16 mx-auto text-[var(--text-muted)]/50 mb-4" />
+            <AlertCircle className="w-16 h-16 mx-auto text-[var(--text-muted)] mb-4" />
             <p className="text-base text-[var(--text-secondary)] mb-2">{error || 'No pages found.'}</p>
             <div className="flex items-center justify-center gap-2 mt-4">
               <button
                 onClick={() => changeQuality(quality === 'high' ? 'dataSaver' : 'high')}
-                className="px-5 py-2 text-xs font-bold rounded-full border border-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-all"
+                className="px-5 py-2 text-xs border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--r3)] transition-all"
               >
                 Try {quality === 'high' ? 'Data Saver' : 'HD'} quality
               </button>
@@ -302,7 +304,7 @@ export default function ManhwaRead() {
           </div>
         ) : pagesInfo?.readable === false ? (
           <div className="text-center py-24 px-6">
-            <AlertCircle className="w-16 h-16 mx-auto text-[var(--text-muted)]/50 mb-4" />
+            <AlertCircle className="w-16 h-16 mx-auto text-[var(--text-muted)] mb-4" />
             <p className="text-base text-[var(--text-secondary)] mb-2">
               {pagesInfo.message || 'This chapter is only available from an external source.'}
             </p>
@@ -311,7 +313,7 @@ export default function ManhwaRead() {
                 href={pagesInfo.externalUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-block mt-4 px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all"
+                className="inline-block mt-4 px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-[var(--r0)] text-sm transition-all"
               >
                 Read officially
               </a>
@@ -319,7 +321,7 @@ export default function ManhwaRead() {
               <div className="flex items-center justify-center gap-2 mt-4">
                 <button
                   onClick={() => changeQuality(quality === 'high' ? 'dataSaver' : 'high')}
-                  className="px-5 py-2 text-xs font-bold rounded-full border border-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-all"
+                  className="px-5 py-2 text-xs border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--r3)] transition-all"
                 >
                   Try {quality === 'high' ? 'Data Saver' : 'HD'} quality
                 </button>
@@ -343,27 +345,31 @@ export default function ManhwaRead() {
       {/* Chapter nav */}
       {!loadingPages && idx >= 0 && (
         <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-12 pt-4">
-          <div className="glass-panel rounded-2xl p-4 flex items-center justify-between gap-3">
-            <button
+          <TextureCard><div className="p-4 flex items-center justify-between gap-3">
+            <TextureButton
+              variant="secondary"
+              size="sm"
               onClick={goOlder}
               disabled={idx <= 0}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--accent)]/30 disabled:opacity-30 disabled:pointer-events-none transition-all"
+              className="w-auto"
             >
               <ChevronLeft className="w-4 h-4" />
               Older
-            </button>
-            <span className="text-xs text-[var(--text-muted)] font-semibold">
+            </TextureButton>
+            <span className="text-xs text-[var(--text-muted)]">
               {chapter ? chapterLabel(chapter) : ''}
             </span>
-            <button
+            <TextureButton
+              variant="accent"
+              size="sm"
               onClick={goNewer}
               disabled={idx >= chaptersAsc.length - 1}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-full bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white disabled:opacity-30 disabled:pointer-events-none transition-all"
+              className="w-auto"
             >
               Newer
               <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+            </TextureButton>
+          </div></TextureCard>
         </div>
       )}
     </div>

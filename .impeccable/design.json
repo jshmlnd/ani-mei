@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-21T00:00:00Z",
+  "title": "Design System: Animei",
+  "extensions": {
+    "colorMeta": {
+      "ramp-0-ink": { "role": "neutral", "displayName": "Ink", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "ramp-1-pegboard": { "role": "neutral", "displayName": "Pegboard", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "ramp-2-panel": { "role": "neutral", "displayName": "Panel", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "ramp-3-raised": { "role": "neutral", "displayName": "Raised", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "ramp-4-peg-line": { "role": "neutral", "displayName": "Peg Line", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "ramp-5-muted": { "role": "neutral", "displayName": "Muted", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "ramp-6-soft": { "role": "neutral", "displayName": "Soft", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "ramp-7-paper": { "role": "neutral", "displayName": "Paper", "tonalRamp": ["#0e0814","#170e1f","#22152d","#2f1f3d","#463357","#9883ab","#c9b9d6","#fbf3ff"] },
+      "bead-pink": { "role": "primary", "displayName": "Bead Pink", "tonalRamp": ["#3d1a2a","#6b2c48","#a8466f","#e9779f","#f78fb8","#ffb6d5","#ffc6df","#ffd6e8"] },
+      "bead-pink-deep": { "role": "primary", "displayName": "Deep Bead Pink", "tonalRamp": ["#3d1a2a","#6b2c48","#a8466f","#e9779f","#f78fb8","#ffb6d5","#ffc6df","#ffd6e8"] },
+      "airing-mint": { "role": "secondary", "displayName": "Airing Mint", "tonalRamp": ["#0f2a22","#1d4a3c","#2f6e5a","#4a957d","#6cbda2","#8fe3c8","#b5eedb","#dbf7ee"] },
+      "warn-amber": { "role": "state", "displayName": "Warn Amber", "tonalRamp": ["#2e2210","#55401c","#86642b","#b98b3c","#e6b152","#ffd27a","#ffe0a3","#fff0d1"] },
+      "error-red": { "role": "state", "displayName": "Error Red", "tonalRamp": ["#2e1010","#561e1e","#8a3030","#bd4646","#d85656","#ff8a8a","#ffb0b0","#ffd8d8"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Spotlight show title." },
+      "headline": { "displayName": "Headline", "purpose": "Section headings, led by a 12px lit bead." },
+      "title": { "displayName": "Title", "purpose": "Panel and poster card titles." },
+      "body": { "displayName": "Body", "purpose": "Synopses, 65ch max, 3-line clamp." },
+      "label": { "displayName": "Label", "purpose": "Episode numbers, meta, scores; tabular numerals." }
+    },
+    "shadows": [
+      { "name": "bead-edge", "value": "inset 0 -4px 0 var(--accent-deep)", "purpose": "Bottom bead edge on primary buttons; 2px when pressed. Secondary uses var(--r2), minimal var(--r1)." },
+      { "name": "bead-lit", "value": "0 0 0 2px var(--r1), 0 0 0 4px var(--accent)", "purpose": "Ring marking the current bead." }
+    ],
+    "motion": [
+      { "name": "bead-place", "value": "0.18s steps(3, end)", "purpose": "A bead dropping into place (current episode, landing heart)." },
+      { "name": "bead-drop", "value": "1.6s steps(4, end) infinite, 0.16s stagger", "purpose": "Loading: five beads dropping onto the peg row." },
+      { "name": "fade-in-up", "value": "0.32s steps(4, end)", "purpose": "Content entering." },
+      { "name": "slide-in-down", "value": "0.2s steps(3, end)", "purpose": "Dropdowns and mobile menu." },
+      { "name": "frame-light", "value": "border-color 0.12s steps(2, end)", "purpose": "Poster frame switching to dotted pink." },
+      { "name": "press", "value": "transform 100ms, translateY(2px)", "purpose": "Button sinking on press." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Pink block with a deep-pink bead edge; the Play / Continue action.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><span>Watch now</span></button>",
+      "css": ".ds-btn { font-family: DotGothic16, 'MS Gothic', monospace; font-size: 18px; border: 2px solid var(--r0, #0e0814); border-radius: 0; padding: 0; cursor: pointer; transition: transform 100ms; } .ds-btn span { display: flex; align-items: center; min-height: 48px; padding: 4px 24px 6px; } .ds-btn-primary { background: var(--accent, #ffb6d5); } .ds-btn-primary span { color: var(--r0, #0e0814); box-shadow: inset 0 -4px 0 var(--accent-deep, #f78fb8); } .ds-btn-primary:hover span { background: var(--accent-deep, #f78fb8); } .ds-btn:active { transform: translateY(2px); } .ds-btn-primary:active span { box-shadow: inset 0 -2px 0 var(--accent-deep, #f78fb8); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #ffb6d5); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Raised plum block; Details and other second actions.",
+      "html": "<button class=\"ds-btn2\"><span>Details</span></button>",
+      "css": ".ds-btn2 { font-family: DotGothic16, 'MS Gothic', monospace; font-size: 18px; background: var(--r3, #2f1f3d); border: 2px solid var(--r0, #0e0814); border-radius: 0; padding: 0; cursor: pointer; transition: transform 100ms; } .ds-btn2 span { display: flex; align-items: center; min-height: 48px; padding: 4px 24px 6px; color: var(--r7, #fbf3ff); box-shadow: inset 0 -4px 0 var(--r2, #22152d); } .ds-btn2:hover span { background: var(--r4, #463357); } .ds-btn2:active { transform: translateY(2px); } .ds-btn2:focus-visible { outline: 2px solid var(--accent, #ffb6d5); outline-offset: 2px; }"
+    },
+    {
+      "name": "Disabled Button",
+      "kind": "button",
+      "refersTo": "button-disabled",
+      "description": "Unavailable: hollow block, label struck through.",
+      "html": "<button class=\"ds-btn-off\" disabled>Next episode</button>",
+      "css": ".ds-btn-off { font-family: DotGothic16, 'MS Gothic', monospace; font-size: 16px; min-height: 44px; padding: 4px 16px 6px; background: var(--r1, #170e1f); border: 2px solid var(--r4, #463357); border-radius: 0; color: var(--r5, #9883ab); text-decoration: line-through 2px; cursor: not-allowed; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Square search field in the nav with a slash key hint.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search anime, manga...\">",
+      "css": ".ds-input { font-family: DotGothic16, 'MS Gothic', monospace; font-size: 14px; width: 224px; padding: 10px 14px; background: var(--r1, #170e1f); color: var(--r7, #fbf3ff); border: 1px solid var(--r3, #2f1f3d); border-radius: 0; outline: none; caret-color: var(--accent, #ffb6d5); } .ds-input::placeholder { color: var(--r5, #9883ab); } .ds-input:focus { border-color: var(--accent, #ffb6d5); background: var(--r3, #2f1f3d); }"
+    },
+    {
+      "name": "Nav Bar",
+      "kind": "nav",
+      "refersTo": "nav-bar",
+      "description": "64px panel bar, wordmark, links with pink active state.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-mark\"><b>ani</b><i>mei</i></span><a class=\"ds-link ds-on\">Home</a><a class=\"ds-link\">Latest</a><a class=\"ds-link\">Manhwa</a></nav>",
+      "css": ".ds-nav { display: flex; align-items: center; gap: 4px; height: 64px; padding: 0 24px; background: var(--r2, #22152d); border-bottom: 4px solid var(--r0, #0e0814); font-family: DotGothic16, 'MS Gothic', monospace; } .ds-mark { font-size: 26px; margin-right: 24px; } .ds-mark b { font-weight: 400; color: var(--r7, #fbf3ff); } .ds-mark i { font-style: normal; color: var(--accent, #ffb6d5); } .ds-link { position: relative; padding: 8px 16px; font-size: 14px; color: var(--r6, #c9b9d6); cursor: pointer; } .ds-link:hover { color: var(--r7, #fbf3ff); } .ds-on { color: var(--accent, #ffb6d5); background: var(--r3, #2f1f3d); } .ds-on::after { content: ''; position: absolute; left: 50%; bottom: -2px; width: 20px; height: 4px; margin-left: -10px; background: var(--accent, #ffb6d5); }"
+    },
+    {
+      "name": "Poster Card",
+      "kind": "card",
+      "refersTo": "poster-card",
+      "description": "Square plum mat around a 3:4 poster; frame lights dotted pink on hover/focus.",
+      "html": "<a class=\"ds-card\" href=\"#\"><div class=\"ds-poster\"></div><p class=\"ds-card-title\">Show title</p><p class=\"ds-card-meta\">12 eps</p></a>",
+      "css": ".ds-card { display: block; width: 170px; padding: 6px; background: var(--r2, #22152d); border: 4px solid var(--r0, #0e0814); font-family: DotGothic16, 'MS Gothic', monospace; text-decoration: none; transition: border-color 0.12s steps(2, end); } .ds-card:hover, .ds-card:focus-visible { border-style: dotted; border-color: var(--accent, #ffb6d5); outline: none; } .ds-poster { aspect-ratio: 3/4; background: repeating-linear-gradient(90deg, var(--r2, #22152d) 0 8px, var(--r3, #2f1f3d) 8px 16px); } .ds-card-title { margin: 10px 6px 0; font-size: 14px; color: var(--r7, #fbf3ff); } .ds-card:hover .ds-card-title { color: var(--accent, #ffb6d5); } .ds-card-meta { margin: 4px 6px 6px; font-size: 12px; color: var(--r5, #9883ab); }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Spotlight and section container: ink frame, raised hairline.",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-in\"><h3>Continue for Jimei</h3><p>Panel body text.</p></div></div>",
+      "css": ".ds-panel { background: var(--r2, #22152d); border: 4px solid var(--r0, #0e0814); font-family: DotGothic16, 'MS Gothic', monospace; } .ds-panel-in { border: 2px solid var(--r3, #2f1f3d); padding: 24px; color: var(--r6, #c9b9d6); } .ds-panel-in h3 { margin: 0 0 8px; font-size: 18px; font-weight: 400; color: var(--r7, #fbf3ff); } .ds-panel-in p { margin: 0; font-size: 14px; }"
+    },
+    {
+      "name": "Bead Strip",
+      "kind": "custom",
+      "refersTo": "bead",
+      "description": "Signature: episodes as beads. Filled = opened on this device, lit = current, hollow = not yet.",
+      "html": "<div class=\"ds-strip\"><button class=\"ds-peg\"><span class=\"ds-bead\"></span>1</button><button class=\"ds-peg\"><span class=\"ds-bead\"></span>2</button><button class=\"ds-peg ds-cur\"><span class=\"ds-bead ds-lit\"></span>3</button><button class=\"ds-peg\"><span class=\"ds-bead ds-hollow\"></span>4</button><button class=\"ds-peg\"><span class=\"ds-bead ds-hollow\"></span>5</button></div>",
+      "css": ".ds-strip { display: flex; gap: 8px; padding: 12px; background: var(--r1, #170e1f); font-family: DotGothic16, 'MS Gothic', monospace; } .ds-peg { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; background: none; border: 0; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--r5, #9883ab); cursor: pointer; } .ds-peg:hover { color: var(--r7, #fbf3ff); } .ds-peg:focus-visible { outline: 2px solid var(--accent, #ffb6d5); outline-offset: 2px; } .ds-cur { color: var(--accent, #ffb6d5); } .ds-bead { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle, var(--r1, #170e1f) 0 22%, var(--accent, #ffb6d5) 25%); } .ds-hollow { background: radial-gradient(circle, transparent 0 40%, var(--r4, #463357) 43% 68%, transparent 71%); } .ds-peg:hover .ds-hollow { background: radial-gradient(circle, var(--r1, #170e1f) 0 22%, var(--accent, #ffb6d5) 25%); } .ds-lit { box-shadow: 0 0 0 2px var(--r1, #170e1f), 0 0 0 4px var(--accent, #ffb6d5); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Bead Board",
+    "overview": "Animei is drawn the way a fan builds a perler-bead sprite for someone: one bead at a time, on a dark plum pegboard. The shell stays plainly a streaming app (top nav, a spotlight, poster grids, a player) and is square, flat and solid. The world enters through four things only: one 8-step plum ramp, one pink bead accent, pixel type everywhere, and the bead itself as the single round object, used as a state marker.\n\nDensity is moderate and grid-snapped. Posters are third-party artwork and carry the colour; the UI frames them in square plum mats and never competes. Motion is stepped, like sprite frames, never eased glides. The deliberate rejection is the streaming-clone look: no giant blurred hero banner, no glowing glass cards, no gradient type.\n\nThe signature is the bead strip: episodes and chapters as beads on a peg row. It is the episode selector on Watch, the progress mark on the spotlight, the carousel pager, and the loading indicator.",
+    "keyCharacteristics": [
+      "One plum ramp (r0 to r7) for every neutral; no free opacities.",
+      "Pink bead as the only accent; deep pink for hover and pressed.",
+      "DotGothic16 at weight 400 for all text, smoothing off.",
+      "Zero radius everywhere except beads.",
+      "States read without colour: hollow, filled, lit ring, struck through.",
+      "Stepped motion (`steps()` timing) for every keyframe."
+    ],
+    "rules": [
+      { "name": "The One Ramp Rule", "body": "Every neutral is one of the eight ramp steps. Tailwind's neutral, stone and indigo scales are remapped onto the ramp and the pink so third-party components land in-world; do not introduce new greys or alpha tints.", "section": "colors" },
+      { "name": "The Scrim Rule", "body": "Smooth gradients exist only as an ink (`ramp-0-ink`) to transparent scrim where text or controls sit on artwork: the player control bar and title bar, and poster hover overlays. Beads (radial fill) and the loading stripe are hard-stop gradients and do not count.", "section": "colors" },
+      { "name": "The One Weight Rule", "body": "Everything is weight 400. Emphasis is size or colour (paper, or pink for a single accent line such as the romaji title).", "section": "typography" },
+      { "name": "The Tabular Count Rule", "body": "Episode numbers, scores, times and counts use tabular numerals so bead rows and meta lines do not jitter.", "section": "typography" },
+      { "name": "The Ink Frame Rule", "body": "Separation comes from a 4px ink border, never a shadow or blur.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do take every neutral from the r0 to r7 ramp and every accent from the pink pair.",
+      "Do use the bead as the only round shape, and give each bead a state meaning.",
+      "Do make states readable without colour: hollow, filled, lit ring, struck through.",
+      "Do frame panels and cards with a 4px ink border and keep corners square.",
+      "Do use `steps()` timing for keyframe motion and respect reduced motion.",
+      "Do keep mint for airing state and amber/red for warning and error text only."
+    ],
+    "donts": [
+      "Don't use drop shadows, blur, glass or glow; depth is tone plus ink borders.",
+      "Don't set type in any face but DotGothic16 or in any weight but 400.",
+      "Don't use smooth decorative gradients; the only gradients are the ink scrim under text on artwork, the bead's own radial fill, and the hard two-tone loading stripe.",
+      "Don't round a corner on anything that is not a bead.",
+      "Don't show a disabled control only by dimming it.",
+      "Don't call opened episodes \"watched\"."
+    ]
+  }
+}

@@ -1,6 +1,9 @@
 import { useRef, useEffect } from 'react';
 
-export default function EpisodeSelector({ totalEpisodes, currentEpisode, onEpisodeChange }) {
+// Bead strip: every episode is a bead on the peg row. Episodes Jimei has
+// opened are filled pink, the one playing is lit, the rest are hollow.
+export default function EpisodeSelector({ totalEpisodes, currentEpisode, onEpisodeChange, seen = [] }) {
+  const seenSet = new Set(seen);
   const episodesPerRange = 100;
   const totalRanges = Math.ceil(totalEpisodes / episodesPerRange);
   const currentRange = Math.floor((currentEpisode - 1) / episodesPerRange);
@@ -12,28 +15,30 @@ export default function EpisodeSelector({ totalEpisodes, currentEpisode, onEpiso
   for (let i = 0; i < totalRanges; i++) {
     const rStart = i * episodesPerRange + 1;
     const rEnd = Math.min(rStart + episodesPerRange - 1, totalEpisodes);
-    ranges.push({ start: rStart, end: rEnd, label: `${rStart} - ${rEnd}` });
+    ranges.push({ start: rStart, end: rEnd, label: `${rStart}–${rEnd}` });
   }
 
   useEffect(() => {
     if (!gridRef.current) return;
-    const btn = gridRef.current.querySelector(`[data-ep="${currentEpisode}"]`);
-    if (btn) {
-      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-    }
+    // Scroll only the bead grid, never the page, so the player stays in view.
+    const grid = gridRef.current;
+    const btn = grid.querySelector(`[data-ep="${currentEpisode}"]`);
+    if (btn) grid.scrollTo({ top: btn.offsetTop - grid.clientHeight / 2, behavior: 'smooth' });
   }, [currentEpisode]);
 
   return (
     <div className="space-y-3">
       {totalRanges > 1 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" role="tablist" aria-label="Episode ranges">
           {ranges.map((range, idx) => (
             <button
               key={idx}
-              className={`flex-none px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 ${
+              role="tab"
+              aria-selected={currentRange === idx}
+              className={`flex-none px-3 py-1 text-sm tabular border-2 transition-colors duration-100 ${
                 currentRange === idx
-                  ? 'bg-[var(--accent)] text-white shadow-sm shadow-[var(--accent)]/25'
-                  : 'bg-white/[0.04] text-[var(--text-muted)] hover:bg-[var(--accent)]/[0.08] hover:text-white border border-[var(--border-subtle)]'
+                  ? 'bg-[var(--accent)] text-[var(--r0)] border-[var(--r0)]'
+                  : 'bg-[var(--r3)] text-[var(--r6)] border-[var(--r0)] hover:text-[var(--r7)] hover:bg-[var(--r4)]'
               }`}
               onClick={() => onEpisodeChange(range.start)}
             >
@@ -43,21 +48,32 @@ export default function EpisodeSelector({ totalEpisodes, currentEpisode, onEpiso
         </div>
       )}
 
-      <div ref={gridRef} className="grid grid-cols-10 sm:grid-cols-10 md:grid-cols-20 gap-1.5 max-h-[280px] overflow-y-auto pr-1 scrollbar-hide">
+      <div
+        ref={gridRef}
+        className="relative grid grid-cols-8 sm:grid-cols-10 md:grid-cols-[repeat(14,minmax(0,1fr))] gap-y-2 max-h-[300px] overflow-y-auto pr-1"
+      >
         {Array.from({ length: end - start + 1 }, (_, i) => {
           const ep = start + i;
+          const state = ep === currentEpisode ? 'lit' : seenSet.has(ep) ? 'seen' : 'hollow';
           return (
             <button
               key={ep}
               data-ep={ep}
-              className={`py-2 text-sm font-semibold rounded-full cursor-pointer transition-all duration-200 ${
-                currentEpisode === ep
-                  ? 'bg-[var(--accent)] text-white shadow-sm shadow-[var(--accent)]/25'
-                  : 'bg-white/[0.03] text-[var(--text-muted)] hover:bg-[var(--accent)]/[0.08] hover:text-white border border-[var(--border-subtle)] hover:border-[var(--accent)]/[0.2]'
-              }`}
+              aria-label={`Episode ${ep}${state === 'seen' ? ', opened' : ''}`}
+              aria-current={state === 'lit' ? 'true' : undefined}
+              className="bead-peg group flex flex-col items-center gap-1 py-1.5 cursor-pointer"
               onClick={() => onEpisodeChange(ep)}
             >
-              {ep}
+              <span
+                className={`bead ${state === 'lit' ? 'bead-lit animate-bead-place' : state === 'seen' ? '' : 'bead-hollow'}`}
+              />
+              <span
+                className={`text-xs tabular ${
+                  state === 'lit' ? 'text-[var(--accent)]' : 'text-[var(--r5)] group-hover:text-[var(--r7)]'
+                }`}
+              >
+                {ep}
+              </span>
             </button>
           );
         })}

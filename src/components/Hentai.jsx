@@ -1,3 +1,7 @@
+import { GradientHeading } from '@/components/ui/gradient-heading';
+import { MinimalCard } from '@/components/ui/minimal-card';
+import { TextureButton } from '@/components/ui/texture-button';
+import { TextureCard } from '@/components/ui/texture-card';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   getHentaiLatest,
@@ -26,7 +30,7 @@ import {
   Download,
   Clapperboard,
   Sparkles,
-} from 'lucide-react';
+} from '@/components/icons';
 
 const AGE_KEY = 'animei-age-ok';
 const PER_PAGE = 24;
@@ -34,31 +38,28 @@ const PER_PAGE = 24;
 /* ---------- 18+ gate ---------- */
 function AgeGate({ onConfirm }) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 px-6 backdrop-blur-sm">
-      <div className="glass-panel w-full max-w-md rounded-3xl p-8 text-center">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/25">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[var(--r0)] px-6">
+      <TextureCard className="w-full max-w-md"><div className="p-8 text-center">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center bg-[var(--r3)] border border-[var(--r4)]">
           <ShieldAlert className="h-7 w-7 text-[var(--accent)]" />
         </div>
-        <h2 className="text-xl font-bold text-white">Adults only</h2>
+        <h2 className="text-xl text-[var(--r7)]">Adults only</h2>
         <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
           This section contains explicit adult content. You must be 18 or older
           (or of legal age in your region) to continue.
         </p>
         <div className="mt-6 flex items-center justify-center gap-3">
-          <button
-            onClick={onConfirm}
-            className="btn-cute px-7 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white text-sm"
-          >
+          <TextureButton variant="accent" size="lg" className="w-auto" onClick={onConfirm}>
             I'm 18+ — Enter
-          </button>
+          </TextureButton>
           <a
             href="/browse"
-            className="px-5 py-2.5 text-sm font-semibold text-[var(--text-secondary)] hover:text-white rounded-full border border-white/[0.1] hover:border-white/[0.2] transition-all"
+            className="px-5 py-2.5 text-sm text-[var(--text-secondary)] hover:text-[var(--r7)] border border-[var(--r4)] hover:border-[var(--r4)] transition-all"
           >
             Go back
           </a>
         </div>
-      </div>
+      </div></TextureCard>
     </div>
   );
 }
@@ -71,8 +72,9 @@ function MediaCard({ item, onOpen }) {
   return (
     <button
       onClick={() => onOpen(item.slug)}
-      className="group relative block w-full rounded-2xl overflow-hidden bg-[var(--bg-surface)] card-hover text-left"
+      className="group relative block w-full h-full card-hover text-left"
     >
+      <MinimalCard className="h-full p-1.5">
       <figure className="relative aspect-[3/4] overflow-hidden">
         {!failed ? (
           <img
@@ -82,7 +84,7 @@ function MediaCard({ item, onOpen }) {
             referrerPolicy="no-referrer"
             onLoad={() => setLoaded(true)}
             onError={() => setFailed(true)}
-            className={`w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.06] ${
+            className={`w-full h-full object-cover transition-all duration-700 ease-out  ${
               loaded ? 'opacity-100' : 'opacity-0'
             }`}
           />
@@ -100,29 +102,29 @@ function MediaCard({ item, onOpen }) {
             </div>
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--r0)] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         {item.type && (
           <div className="absolute top-2.5 left-2.5 z-10">
-            <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide bg-[var(--accent)]/20 text-[var(--accent)] backdrop-blur-md rounded-full border border-[var(--accent)]/25">
+            <span className="px-2.5 py-1 text-[10px] uppercase tracking-wide bg-[var(--r3)] text-[var(--accent)] border border-[var(--r4)]">
               {item.type}
             </span>
           </div>
         )}
         {item.episodes && (
           <div className="absolute bottom-2.5 left-2.5 z-10">
-            <span className="px-2.5 py-1 text-[10px] font-bold bg-black/60 text-white/80 backdrop-blur-md rounded-full border border-white/[0.1]">
+            <span className="px-2.5 py-1 text-[10px] bg-[var(--r0)] text-[var(--r6)] border border-[var(--r4)]">
               {item.episodes}
             </span>
           </div>
         )}
         <div className="absolute bottom-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
-          <div className="w-11 h-11 flex items-center justify-center rounded-full bg-[var(--accent)] shadow-lg shadow-[var(--accent)]/30">
-            <Play className="w-5 h-5 text-white ml-0.5" fill="currentColor" />
+          <div className="w-11 h-11 flex items-center justify-center bg-[var(--accent)]">
+            <Play className="w-5 h-5 text-[var(--r0)]" />
           </div>
         </div>
         {item.description && (
           <div className="absolute bottom-0 left-0 right-0 p-3 z-10 opacity-0 group-hover:opacity-100 transition-all duration-500 translate-y-3 group-hover:translate-y-0">
-            <p className="text-xs text-white/70 line-clamp-2 leading-relaxed">
+            <p className="text-xs text-[var(--r6)] line-clamp-2 leading-relaxed">
               {item.description.replace(/<[^>]*>/g, '').slice(0, 120)}
               {item.description.length > 120 ? '...' : ''}
             </p>
@@ -130,7 +132,7 @@ function MediaCard({ item, onOpen }) {
         )}
       </figure>
       <div className="p-3">
-        <h3 className="text-sm font-bold text-[var(--text-primary)] leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[var(--accent)] transition-colors duration-300">
+        <h3 className="text-sm text-[var(--text-primary)] leading-snug line-clamp-2 min-h-[2.75em] group-hover:text-[var(--accent)] transition-colors duration-300">
           {item.title}
         </h3>
         {item.titleJapanese ? (
@@ -139,6 +141,7 @@ function MediaCard({ item, onOpen }) {
           <p aria-hidden="true" className="mt-1 text-[11px] leading-[1.4] truncate invisible select-none">-</p>
         )}
       </div>
+    </MinimalCard>
     </button>
   );
 }
@@ -152,25 +155,21 @@ function SpotlightHero({ items, onOpen }) {
       imageFor={(s) => s.image}
       renderContent={(item) => (
         <>
-          <div className="flex items-center gap-2 mb-5 animate-fade-in">
-            <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-[var(--accent)]/20 text-[var(--accent)] rounded-full border border-[var(--accent)]/25 backdrop-blur-sm">
-              <Flame className="w-3 h-3" />
-              Spotlight
-            </span>
-          </div>
           <h1
-            className="text-3xl md:text-4xl lg:text-[3rem] font-bold text-white mb-3 leading-[1.1] line-clamp-2 animate-fade-in-up tracking-tight"
+            className="text-2xl sm:text-3xl lg:text-[2.75rem] text-[var(--r7)] mb-3 leading-[1.1] animate-fade-in-up"
             style={{ animationDelay: '0.15s' }}
           >
             {item.title}
           </h1>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+          </div>
           {item.titleJapanese && (
-            <p className="text-base text-[var(--accent)]/60 mb-3 font-medium line-clamp-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+            <p className="text-base text-[var(--accent)] mb-3 line-clamp-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
               {item.titleJapanese}
             </p>
           )}
           {item.meta && (
-            <div className="flex items-center gap-2.5 text-[13px] text-white/50 mb-4 animate-fade-in-up" style={{ animationDelay: '0.32s' }}>
+            <div className="flex items-center gap-2.5 text-[13px] text-[var(--r5)] mb-4 animate-fade-in-up" style={{ animationDelay: '0.32s' }}>
               {item.meta
                 .split('\n')
                 .map((m) => m.trim())
@@ -178,7 +177,7 @@ function SpotlightHero({ items, onOpen }) {
                 .slice(0, 3)
                 .map((m, mi) => (
                   <span key={mi} className="flex items-center gap-2.5">
-                    {mi > 0 && <span className="w-1 h-1 bg-white/25 rounded-full" />}
+                    {mi > 0 && <span className="w-1 h-1 bg-[var(--r4)]" />}
                     <span>{m}</span>
                   </span>
                 ))}
@@ -186,7 +185,7 @@ function SpotlightHero({ items, onOpen }) {
           )}
           {item.description && (
             <p
-              className="text-sm text-white/45 mb-6 line-clamp-3 leading-relaxed animate-fade-in-up"
+              className="text-sm text-[var(--r5)] mb-6 line-clamp-3 leading-relaxed animate-fade-in-up"
               style={{ animationDelay: '0.3s' }}
             >
               {item.description}
@@ -195,7 +194,7 @@ function SpotlightHero({ items, onOpen }) {
           <div className="flex items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
             <button
               onClick={() => onOpen(item.slug)}
-              className="group inline-flex items-center gap-2.5 px-7 py-3.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all duration-300 hover:shadow-[0_0_30px_rgba(var(--accent-rgb),0.35)] hover:scale-[1.03]"
+              className="group inline-flex items-center gap-2.5 px-7 py-3 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-[var(--r0)] text-base border-2 border-[var(--r0)] shadow-[inset_0_-4px_0_var(--accent-deep)] transition-colors duration-100"
             >
               <Play size="14" fill="currentColor" />
               Watch Now
@@ -253,7 +252,7 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
         <p className="text-lg text-[var(--text-secondary)]">{error || 'Title not found.'}</p>
         <button
           onClick={onBack}
-          className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-white font-bold text-sm rounded-full transition-all"
+          className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-deep)] text-[var(--r0)] text-sm transition-all"
         >
           Go back
         </button>
@@ -270,14 +269,14 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-10">
         <button
           onClick={onBack}
-          className="mb-5 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-white rounded-full border border-white/[0.08] hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/[0.06] transition-all"
+          className="mb-5 inline-flex items-center gap-2 px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--r7)] border border-[var(--r4)] hover:border-[var(--accent)] hover:bg-[var(--r3)] transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to browse
         </button>
 
         {/* Player */}
-        <div className="rounded-2xl overflow-hidden border border-[var(--border-subtle)] bg-black">
+        <div className="overflow-hidden border border-[var(--border-subtle)] bg-black">
           {embedSrc ? (
             <iframe
               key={embedSrc}
@@ -301,7 +300,7 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
           ) : (
             <div className="w-full aspect-video flex items-center justify-center bg-[var(--bg-surface)]">
               <div className="text-center px-4">
-                <Clapperboard className="w-14 h-14 mx-auto text-[var(--text-muted)]/50 mb-3" />
+                <Clapperboard className="w-14 h-14 mx-auto text-[var(--text-muted)] mb-3" />
                 <p className="text-sm text-[var(--text-muted)]">No playable source for this episode yet.</p>
               </div>
             </div>
@@ -310,8 +309,8 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
 
         {/* Episodes */}
         {episodes.length > 0 && (
-          <div className="glass-panel rounded-2xl p-5 mt-5">
-            <h3 className="font-bold text-white mb-3 text-sm uppercase tracking-wider">
+          <TextureCard className="mt-5"><div className="p-5">
+            <h3 className="text-[var(--r7)] mb-3 text-sm uppercase tracking-wider">
               Episodes ({episodes.length})
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
@@ -322,10 +321,10 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
                     setActiveEp(i);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className={`group rounded-xl overflow-hidden border text-left transition-all duration-200 ${
+                  className={`group  overflow-hidden border text-left transition-all duration-200 ${
                     i === activeEp
-                      ? 'border-[var(--accent)]/50 shadow-[0_0_20px_rgba(var(--accent-rgb),0.12)]'
-                      : 'border-[var(--border-subtle)] hover:border-[var(--accent)]/30'
+                      ? 'border-[var(--accent)] '
+                      : 'border-[var(--border-subtle)] hover:border-[var(--accent)]'
                   }`}
                 >
                   <div className="relative aspect-video bg-[var(--bg-elevated)] overflow-hidden">
@@ -335,7 +334,7 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
                         alt=""
                         loading="lazy"
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-cover transition-transform duration-300"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -343,12 +342,12 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
                       </div>
                     )}
                     {i === activeEp && (
-                      <div className="absolute inset-0 bg-[var(--accent)]/15 flex items-center justify-center">
-                        <Play className="w-6 h-6 text-white" fill="currentColor" />
+                      <div className="absolute inset-0 bg-[var(--r3)] flex items-center justify-center">
+                        <Play className="w-6 h-6 text-[var(--r7)]" fill="currentColor" />
                       </div>
                     )}
                   </div>
-                  <p className="p-2 text-[11px] font-semibold text-[var(--text-secondary)] line-clamp-2 leading-snug">
+                  <p className="p-2 text-[11px] text-[var(--text-secondary)] line-clamp-2 leading-snug">
                     {e.title}
                   </p>
                 </button>
@@ -359,7 +358,7 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
                 {ep.servers.map((s, i) => (
                   <span
                     key={i}
-                    className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-full border border-[var(--border-subtle)] text-[var(--text-muted)]"
+                    className="px-2.5 py-1 text-[10px] uppercase tracking-wide border border-[var(--border-subtle)] text-[var(--text-muted)]"
                   >
                     {s.label || s.type}
                   </span>
@@ -374,7 +373,7 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
                     href={d.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-all"
                   >
                     <Download className="w-3.5 h-3.5" />
                     {d.label || 'Download'}
@@ -382,36 +381,36 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
                 ))}
               </div>
             )}
-          </div>
+          </div></TextureCard>
         )}
 
         {/* Info */}
-        <div className="glass-panel rounded-2xl p-5 md:p-6 mt-5">
+        <TextureCard className="mt-5"><div className="p-5 md:p-6">
           <div className="flex flex-col sm:flex-row gap-5">
             {detail.image && (
               <img
                 src={detail.image}
                 alt={detail.title}
                 referrerPolicy="no-referrer"
-                className="w-36 sm:w-44 shrink-0 aspect-[3/4] object-cover rounded-xl border border-[var(--border-subtle)]"
+                className="w-36 sm:w-44 shrink-0 aspect-[3/4] object-cover border border-[var(--border-subtle)]"
               />
             )}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 {detail.category && (
-                  <span className="px-3 py-1 text-[11px] font-bold uppercase tracking-wide bg-[var(--accent)]/15 text-[var(--accent)] rounded-full border border-[var(--accent)]/20">
+                  <span className="px-3 py-1 text-[11px] uppercase tracking-wide bg-[var(--r3)] text-[var(--accent)] border border-[var(--r4)]">
                     {detail.category}
                   </span>
                 )}
                 {detail.status && (
-                  <span className="px-3 py-1 text-[11px] font-semibold bg-white/[0.06] text-white/60 rounded-full border border-white/[0.08]">
+                  <span className="px-3 py-1 text-[11px] bg-[var(--r3)] text-[var(--r5)] border border-[var(--r4)]">
                     {detail.status}
                   </span>
                 )}
               </div>
-              <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">{detail.title}</h1>
+              <GradientHeading as="h1" variant="animei" size="xs" className="leading-tight">{detail.title}</GradientHeading>
               {detail.titleJapanese && (
-                <p className="text-sm text-[var(--accent)]/60 mt-1">{detail.titleJapanese}</p>
+                <p className="text-sm text-[var(--accent)] mt-1">{detail.titleJapanese}</p>
               )}
               {detail.aired && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
@@ -426,7 +425,7 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
                       key={g}
                       onClick={() => onSelectGenre?.(g)}
                       title={`Browse ${g}`}
-                      className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium bg-[var(--accent)]/[0.08] text-[var(--accent)]/80 rounded-full border border-[var(--accent)]/[0.15] hover:bg-[var(--accent)]/[0.15] hover:border-[var(--accent)]/30 transition-all"
+                      className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-[var(--r3)] text-[var(--accent)] border border-[var(--r4)] hover:bg-[var(--r3)] hover:border-[var(--accent)] transition-all"
                     >
                       <Tag className="w-3 h-3" />
                       {g}
@@ -438,11 +437,11 @@ function HentaiDetail({ slug, onBack, onSelectGenre }) {
           </div>
           {detail.synopsis && (
             <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">
-              <h3 className="font-bold text-white mb-2 text-sm uppercase tracking-wider">Synopsis</h3>
+              <h3 className="text-[var(--r7)] mb-2 text-sm uppercase tracking-wider">Synopsis</h3>
               <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{detail.synopsis}</p>
             </div>
           )}
-        </div>
+        </div></TextureCard>
       </div>
     </div>
   );
@@ -619,7 +618,6 @@ export default function Hentai() {
   return (
     <div className="min-h-screen bg-[var(--bg-deep)] pt-20 relative overflow-x-clip">
       {/* Ambient pink glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[36rem] h-[16rem] bg-[var(--accent)]/[0.05] rounded-full blur-[130px] pointer-events-none" />
       {!allowed && <AgeGate onConfirm={confirmAge} />}
 
       {detailSlug ? (
@@ -633,7 +631,7 @@ export default function Hentai() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
             {/* Header + search */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6">
-              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-2 shrink-0">
+              <h1 className="text-2xl md:text-3xl text-[var(--r7)] flex items-center gap-2 shrink-0">
                 <Flame className="w-6 h-6 text-[var(--accent)]" fill="currentColor" />
                 Hentai
               </h1>
@@ -644,13 +642,13 @@ export default function Hentai() {
                   value={query}
                   onChange={handleSearchChange}
                   placeholder="Search titles..."
-                  className="w-full pl-11 pr-10 py-2.5 bg-white/[0.03] border border-[var(--border-subtle)] rounded-full outline-none text-white text-sm placeholder-[var(--text-muted)] focus:border-[var(--accent)]/30 focus:bg-white/[0.05] focus:shadow-[0_0_0_4px_rgba(var(--accent-rgb),0.08)] transition-all duration-300"
+                  className="w-full pl-11 pr-10 py-2.5 border border-[var(--border-subtle)] outline-none text-[var(--r7)] text-sm placeholder-[var(--text-muted)] focus:border-[var(--accent)] transition-all duration-300"
                 />
                 {query && (
                   <button
                     onClick={clearFilters}
                     aria-label="Clear search"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--r7)] hover:bg-[var(--r3)] transition-colors"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -665,10 +663,10 @@ export default function Hentai() {
                   <button
                     key={g.slug}
                     onClick={() => selectGenre(g.slug)}
-                    className={`flex-none px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ${
+                    className={`flex-none px-3.5 py-1.5 text-xs   border transition-all duration-200 ${
                       activeGenre === g.slug
-                        ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
-                        : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white hover:border-[var(--accent)]/[0.2]'
+                        ? 'bg-[var(--accent)] text-[var(--r0)] border-[var(--accent)]  '
+                        : ' text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--r3)] hover:text-[var(--r7)] hover:border-[var(--r4)]'
                     }`}
                   >
                     {g.name}
@@ -681,8 +679,8 @@ export default function Hentai() {
               <LoadingSpinner />
             ) : error && !gridItems.length && popular.length === 0 ? (
               <div className="text-center py-24">
-                <AlertCircle className="w-20 h-20 mx-auto text-[var(--text-muted)]/30 mb-4" />
-                <p className="text-xl font-bold text-[var(--text-secondary)] mb-2">Source unreachable</p>
+                <AlertCircle className="w-20 h-20 mx-auto text-[var(--text-muted)] mb-4" />
+                <p className="text-xl text-[var(--text-secondary)] mb-2">Source unreachable</p>
                 <p className="text-sm text-[var(--text-muted)]">{error}</p>
               </div>
             ) : (
@@ -692,8 +690,8 @@ export default function Hentai() {
                   <section className="mb-10">
                     <div className="flex items-end justify-between mb-4">
                       <div>
-                        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-[var(--accent)]/60" />
+                        <h2 className="text-lg md:text-xl text-[var(--r7)] flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-[var(--accent)]" />
                           Popular now
                         </h2>
                         <p className="text-sm text-[var(--text-muted)] mt-1">Most watched this week</p>
@@ -711,7 +709,7 @@ export default function Hentai() {
 
                 {/* Main grid */}
                 <div className="flex items-center justify-between mb-1">
-                  <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">
+                  <h2 className="text-lg md:text-xl text-[var(--r7)]">
                     {query.trim()
                       ? `Results for "${query.trim()}"`
                       : activeGenre
@@ -719,7 +717,7 @@ export default function Hentai() {
                         : 'Latest updates'}
                   </h2>
                   {!searching && gridItems.length > 0 && (
-                    <span className="px-3 py-1.5 text-xs font-bold bg-[var(--accent)]/10 text-[var(--accent)] rounded-full border border-[var(--accent)]/20">
+                    <span className="px-3 py-1.5 text-xs bg-[var(--r3)] text-[var(--accent)] border border-[var(--r4)]">
                       {gridItems.length} titles
                     </span>
                   )}
@@ -729,15 +727,15 @@ export default function Hentai() {
                     ? 'Matching titles across the catalog'
                     : activeGenre
                       ? 'Titles filed under this tag'
-                      : 'Fresh uploads, updated daily'}
+                      : 'Newest uploads first'}
                 </p>
 
                 {searching ? (
                   <LoadingSpinner />
                 ) : gridItems.length === 0 ? (
                   <div className="text-center py-24">
-                    <Search className="w-20 h-20 mx-auto text-[var(--text-muted)]/30 mb-4" />
-                    <p className="text-xl font-bold text-[var(--text-secondary)] mb-2">No results found</p>
+                    <Search className="w-20 h-20 mx-auto text-[var(--text-muted)] mb-4" />
+                    <p className="text-xl text-[var(--text-secondary)] mb-2">No results found</p>
                     <p className="text-sm text-[var(--text-muted)]">Try a different search term or genre</p>
                   </div>
                 ) : (
@@ -752,7 +750,7 @@ export default function Hentai() {
                         <button
                           onClick={loadMore}
                           disabled={loadingMore}
-                          className="px-7 py-3 bg-[var(--accent)]/10 hover:bg-[var(--accent)]/20 disabled:opacity-50 text-[var(--accent)] font-bold text-sm rounded-full border border-[var(--accent)]/25 transition-all duration-300"
+                          className="px-7 py-3 bg-[var(--r3)] hover:bg-[var(--r4)] text-[var(--accent)] text-sm border-2 border-[var(--r0)] shadow-[inset_0_-4px_0_var(--r2)] transition-colors duration-100"
                         >
                           {loadingMore ? 'Loading...' : 'Load more'}
                         </button>

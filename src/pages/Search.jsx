@@ -11,7 +11,7 @@ import { searchManhwa, getManhwaPopular } from '../api/manhwaService';
 import AnimeCard from '../components/AnimeCard';
 import { ManhwaCard, ManhwaDetail } from '../components/Manhwa';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { Search as SearchIcon, Check, Heart, Clapperboard, BookOpen } from 'lucide-react';
+import { Search as SearchIcon, Check, Heart, Clapperboard, BookOpen } from '@/components/icons';
 
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -190,7 +190,7 @@ export default function Search() {
           ) : (
             <>
               <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
+                <h1 className="text-2xl md:text-3xl text-[var(--r7)] flex items-center gap-2">
                   {tab === 'anime' && query ? (
                     <Heart className="w-6 h-6 text-[var(--accent)]" fill="currentColor" />
                   ) : tab === 'manhwa' ? (
@@ -199,12 +199,12 @@ export default function Search() {
                   {tab === 'manhwa' && query ? `Manga results for "${query}"` : getTitle()}
                 </h1>
                 {tab === 'anime' && !loading && animeList.length > 0 && (
-                  <span className="px-3 py-1 text-xs font-bold bg-white/[0.06] text-[var(--text-muted)] rounded-full border border-white/[0.06]">
+                  <span className="px-3 py-1 text-xs bg-[var(--r3)] text-[var(--text-muted)] border border-[var(--r4)]">
                     {animeList.length} results
                   </span>
                 )}
                 {tab === 'manhwa' && !mangaLoading && mangaItems.length > 0 && (
-                  <span className="px-3 py-1.5 text-xs font-bold bg-[var(--accent)]/10 text-[var(--accent)] rounded-full border border-[var(--accent)]/20">
+                  <span className="px-3 py-1.5 text-xs bg-[var(--r3)] text-[var(--accent)] border border-[var(--r4)]">
                     {mangaItems.length} {mangaItems.length === 1 ? 'title' : 'titles'}
                   </span>
                 )}
@@ -219,17 +219,17 @@ export default function Search() {
                     <button
                       key={t.key}
                       onClick={() => setTab(t.key)}
-                      className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full border transition-all duration-200 ${
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm   border transition-all duration-200 ${
                         tab === t.key
-                          ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm shadow-[var(--accent)]/25'
-                          : 'bg-white/[0.03] text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--accent)]/[0.08] hover:text-white hover:border-[var(--accent)]/[0.2]'
+                          ? 'bg-[var(--accent)] text-[var(--r0)] border-[var(--accent)]  '
+                          : ' text-[var(--text-muted)] border-[var(--border-subtle)] hover:bg-[var(--r3)] hover:text-[var(--r7)] hover:border-[var(--r4)]'
                       }`}
                     >
                       <t.icon className="w-4 h-4" />
                       {t.label}
                     </button>
                   ))}
-                  <span className="ml-1 text-[11px] text-[var(--text-muted)]/70 hidden sm:inline">
+                  <span className="ml-1 text-[11px] text-[var(--text-muted)] hidden sm:inline">
                     Hentai is excluded from results
                   </span>
                 </div>
@@ -240,8 +240,8 @@ export default function Search() {
                   <LoadingSpinner />
                 ) : animeList.length === 0 ? (
                   <div className="text-center py-24">
-                    <SearchIcon className="w-20 h-20 mx-auto text-[var(--text-muted)]/30 mb-4" />
-                    <p className="text-xl font-bold text-[var(--text-secondary)] mb-2">No results found</p>
+                    <SearchIcon className="w-20 h-20 mx-auto text-[var(--text-muted)] mb-4" />
+                    <p className="text-xl text-[var(--text-secondary)] mb-2">No results found</p>
                     <p className="text-sm text-[var(--text-muted)]">Try a different search term or genre</p>
                   </div>
                 ) : (
@@ -260,7 +260,7 @@ export default function Search() {
 
                     {!pageInfo?.hasNextPage && animeList.length > 0 && (
                       <div className="py-10 text-center">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-[var(--text-muted)] bg-white/[0.03] rounded-full border border-white/[0.06]">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 text-xs text-[var(--text-muted)] border border-[var(--r4)]">
                           <Check className="w-3.5 h-3.5" />
                           You've reached the end
                         </div>
@@ -272,8 +272,8 @@ export default function Search() {
                 <LoadingSpinner />
               ) : mangaItems.length === 0 ? (
                 <div className="text-center py-24">
-                  <BookOpen className="w-20 h-20 mx-auto text-[var(--text-muted)]/30 mb-4" />
-                  <p className="text-xl font-bold text-[var(--text-secondary)] mb-2">No manga found</p>
+                  <BookOpen className="w-20 h-20 mx-auto text-[var(--text-muted)] mb-4" />
+                  <p className="text-xl text-[var(--text-secondary)] mb-2">No manga found</p>
                   <p className="text-sm text-[var(--text-muted)]">
                     {query ? 'Try a different title — results show the closest match' : 'Try searching for a title above'}
                   </p>
@@ -281,7 +281,7 @@ export default function Search() {
               ) : (
                 <>
                   {mangaMeta.exactMatch === false && (
-                    <p className="mb-4 text-xs text-amber-300/80">
+                    <p className="mb-4 text-xs text-[var(--warn)]">
                       Showing closest match{mangaMeta.resolvedFrom ? ` for "${mangaMeta.resolvedFrom}"` : ''} — this may not be the exact title.
                     </p>
                   )}

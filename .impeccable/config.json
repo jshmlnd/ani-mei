@@ -1,0 +1,98 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "ai-color-palette",
+        "value": "*",
+        "files": [
+          "src/components/ui/texture-button.jsx"
+        ],
+        "createdAt": "2026-11-21T05:00:01.951Z",
+        "reason": "Claude triage: indigo-* classes come from the cult-ui source, but src/index.css @theme remaps the indigo scale to the Animei pink palette (#ffb6d5/#f78fb8), so no purple renders"
+      },
+      {
+        "rule": "kicker-above-heading",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-21T06:05:25.545Z",
+        "reason": "Claude triage: throwaway direction-round sketch rendered as a skeleton on the decision page; never shipped"
+      },
+      {
+        "rule": "skipped-heading",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-21T06:05:25.670Z",
+        "reason": "Claude triage: throwaway direction-round sketch rendered as a skeleton on the decision page; never shipped"
+      },
+      {
+        "rule": "skipped-heading",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/model-pick.html"
+        ],
+        "createdAt": "2026-11-21T06:05:25.793Z",
+        "reason": "Claude triage: throwaway direction-round sketch rendered as a skeleton on the decision page; never shipped"
+      },
+      {
+        "rule": "skipped-heading",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-cassette.html"
+        ],
+        "createdAt": "2026-11-21T06:05:25.962Z",
+        "reason": "Claude triage: throwaway direction-round sketch rendered as a skeleton on the decision page; never shipped"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-cassette.html"
+        ],
+        "createdAt": "2026-11-21T06:05:26.082Z",
+        "reason": "Claude triage: throwaway direction-round sketch rendered as a skeleton on the decision page; never shipped"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/model-pick.html"
+        ],
+        "createdAt": "2026-11-21T06:27:35.003Z",
+        "reason": "Claude triage: unchosen direction-round sketch; its fonts belong to that rejected direction, never shipped"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-cassette.html"
+        ],
+        "createdAt": "2026-11-21T06:27:35.127Z",
+        "reason": "Claude triage: unchosen direction-round sketch; its fonts belong to that rejected direction, never shipped"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-catalog.html"
+        ],
+        "createdAt": "2026-11-21T06:27:35.247Z",
+        "reason": "Claude triage: unchosen direction-round sketch; its fonts belong to that rejected direction, never shipped"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-11-21T06:27:35.413Z",
+        "reason": "Claude triage: unchosen direction-round sketch; its fonts belong to that rejected direction, never shipped"
+      }
+    ]
+  }
+}

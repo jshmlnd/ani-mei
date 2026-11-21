@@ -5,7 +5,7 @@ function renderSegments(segments) {
   return segments.map((s, i) => {
     const className = [
       s.italic ? 'italic text-[var(--accent)]' : '',
-      s.bold ? 'font-bold' : '',
+      s.bold ? '' : '',
       s.underline ? 'underline' : '',
     ]
       .filter(Boolean)
@@ -30,7 +30,7 @@ export default function SubtitleOverlay({ cues, currentTime }) {
       {active.map((cue, ci) => (
         <div
           key={`${cue.start}-${ci}`}
-          className="animate-fade-in rounded-xl bg-black/35 px-4 py-1.5 backdrop-blur-[2px]"
+          className="animate-fade-in bg-[var(--r0)] px-4 py-1.5"
           style={{
             animationDuration: '0.18s',
             textAlign: cue.align === 'left' ? 'left' : cue.align === 'right' ? 'right' : 'center',
@@ -39,7 +39,7 @@ export default function SubtitleOverlay({ cues, currentTime }) {
           {cue.lines.map((line, li) => (
             <div
               key={li}
-              className="text-[clamp(14px,2.4vw,22px)] font-bold leading-snug text-[var(--accent)]"
+              className="text-[clamp(14px,2.4vw,22px)] leading-snug text-[var(--accent)]"
               style={{
                 textShadow:
                   '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.65)',

@@ -1,30 +1,25 @@
 import { Link } from 'react-router-dom';
-import animeiLogo from '../assets/animeiV2.png';
-import { Heart } from 'lucide-react';
+import Wordmark from './Wordmark';
+import { Heart } from '@/components/icons';
 
 export default function Footer() {
   return (
     <footer className="relative mt-auto">
-      <div className="h-px bg-gradient-to-r from-transparent via-[var(--accent)]/20 to-transparent" />
-      <div className="bg-[var(--bg-surface)]/50">
+      <div className="h-1 bg-[var(--r0)]" />
+      <div className="bg-[var(--r2)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="md:col-span-1">
               <Link to="/" className="inline-flex items-center gap-2 mb-4 group">
-                <img
-                  src={animeiLogo}
-                  alt="Animei"
-                  className="h-8 md:h-10 transition-transform duration-300 group-hover:scale-105"
-                />
-                <Heart className="w-4 h-4 text-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity animate-heart-beat" fill="currentColor" />
+                <Wordmark className="text-[30px]" />
               </Link>
               <p className="text-xs text-[var(--text-muted)] leading-relaxed max-w-xs">
-                Free anime streaming platform. Watch thousands of episodes in HD quality.
+                Anime to watch and manhwa to read, all in one place.
               </p>
             </div>
 
             <div>
-              <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-4">Navigation</h4>
+              <h4 className="text-xs text-[var(--r7)] uppercase tracking-widest mb-4">Navigation</h4>
               <ul className="space-y-2.5">
                 <li><Link to="/browse" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors duration-200">Home</Link></li>
                 <li><Link to="/browse?type=TRENDING" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors duration-200">Trending</Link></li>
@@ -34,7 +29,7 @@ export default function Footer() {
             </div>
 
             <div>
-              <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-4">Genres</h4>
+              <h4 className="text-xs text-[var(--r7)] uppercase tracking-widest mb-4">Genres</h4>
               <ul className="space-y-2.5">
                 {['Action', 'Comedy', 'Romance', 'Sci-Fi'].map((g) => (
                   <li key={g}>
@@ -52,7 +47,7 @@ export default function Footer() {
             </div>
 
             <div>
-              <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-4">Disclaimer</h4>
+              <h4 className="text-xs text-[var(--r7)] uppercase tracking-widest mb-4">Disclaimer</h4>
               <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                 We do not host any content. All anime content is provided by third-party services.
                 EST. 2026
@@ -62,11 +57,11 @@ export default function Footer() {
 
           <div className="mt-10 pt-6 border-t border-[var(--border-subtle)] flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-xs text-[var(--text-muted)]">
-              &copy; 2026 Animei. All rights reserved. <a href='/hentai' className="text-[var(--accent)] hover:animate-bounce"> 18+ </a>
+              &copy; 2026 Animei. All rights reserved. <a href='/hentai' className="text-[var(--accent)] hover:underline underline-offset-4"> 18+ </a>
             </p>
             <div className="flex items-center gap-2">
               <Heart size="12" className="text-[var(--accent)] animate-heart-beat" fill="currentColor" />
-              <span className="text-xs text-[var(--text-muted)]/50">Built with love for jimei!</span>
+              <span className="text-xs text-[var(--text-muted)]">Built with love for jimei!</span>
             </div>
           </div>
         </div>
