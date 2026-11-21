@@ -92,6 +92,15 @@
         ],
         "createdAt": "2026-11-21T06:27:35.413Z",
         "reason": "Claude triage: unchosen direction-round sketch; its fonts belong to that rejected direction, never shipped"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-21T07:03:51.886Z",
+        "reason": "Claude triage: historical direction-round sketch drawn before the user swapped DotGothic16 for Pixelify Sans; never shipped"
       }
     ]
   }
