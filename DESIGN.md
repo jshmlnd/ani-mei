@@ -17,27 +17,27 @@ colors:
   error-red: "#ff8a8a"
 typography:
   display:
-    fontFamily: "DotGothic16, MS Gothic, ui-monospace, monospace"
+    fontFamily: "Pixelify Sans, ui-monospace, monospace"
     fontSize: "2.75rem"
-    fontWeight: 400
+    fontWeight: 600
     lineHeight: 1.15
   headline:
-    fontFamily: "DotGothic16, MS Gothic, ui-monospace, monospace"
+    fontFamily: "Pixelify Sans, ui-monospace, monospace"
     fontSize: "1.5rem"
-    fontWeight: 400
+    fontWeight: 600
     lineHeight: 1.25
   title:
-    fontFamily: "DotGothic16, MS Gothic, ui-monospace, monospace"
+    fontFamily: "Pixelify Sans, ui-monospace, monospace"
     fontSize: "1.125rem"
-    fontWeight: 400
+    fontWeight: 600
     lineHeight: 1.25
   body:
-    fontFamily: "DotGothic16, MS Gothic, ui-monospace, monospace"
+    fontFamily: "Pixelify Sans, ui-monospace, monospace"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.6
   label:
-    fontFamily: "DotGothic16, MS Gothic, ui-monospace, monospace"
+    fontFamily: "Pixelify Sans, ui-monospace, monospace"
     fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.4
@@ -115,7 +115,7 @@ The signature is the bead strip: episodes and chapters as beads on a peg row. It
 **Key Characteristics:**
 - One plum ramp (r0 to r7) for every neutral; no free opacities.
 - Pink bead as the only accent; deep pink for hover and pressed.
-- DotGothic16 at weight 400 for all text, smoothing off.
+- Pixelify Sans for all text: 600 for headings, 400 for everything else, smoothing off.
 - Zero radius everywhere except beads.
 - States read without colour: hollow, filled, lit ring, struck through.
 - Stepped motion (`steps()` timing) for every keyframe.
@@ -151,10 +151,10 @@ A dark, low-chroma plum ramp with one warm pink bead and a few narrowly scoped s
 
 ## Typography
 
-**Display Font:** DotGothic16 (with MS Gothic, ui-monospace, monospace)
-**Body Font:** DotGothic16, same stack
+**Display Font:** Pixelify Sans 600 (with ui-monospace, monospace)
+**Body Font:** Pixelify Sans 400, same stack
 
-**Character:** a single Japanese dot-matrix face at one weight. Hierarchy comes from size and ramp colour, never weight, gradient or italics. Font smoothing is off so the dots stay crisp; the font loads with `display=block` to avoid a fallback flash.
+**Character:** a single soft-cornered pixel face. Headings take its 600 weight; everything else stays at 400. Hierarchy otherwise comes from size and ramp colour, never gradient or italics. Font smoothing is off so the dots stay crisp; the font loads with `display=block` to avoid a fallback flash.
 
 ### Hierarchy
 - **Display** (400, 1.5rem to 2.75rem responsive, 1.15): spotlight show title.
@@ -164,7 +164,7 @@ A dark, low-chroma plum ramp with one warm pink bead and a few narrowly scoped s
 - **Label** (400, 0.75rem, tabular numerals): episode numbers, meta, counts, scores.
 
 ### Named Rules
-**The One Weight Rule.** Everything is weight 400. Emphasis is size or colour (paper, or pink for a single accent line such as the romaji title).
+**The Two Weight Rule.** Headings are 600, everything else is 400; nothing else uses bold. Emphasis inside text is size or colour (paper, or pink for a single accent line such as the romaji title).
 
 **The Tabular Count Rule.** Episode numbers, scores, times and counts use tabular numerals so bead rows and meta lines do not jitter.
 
@@ -244,7 +244,7 @@ Pixel icons (pixelarticons) only, at 16 to 20px, matching the dot type.
 
 ### Don't:
 - **Don't** use drop shadows, blur, glass or glow; depth is tone plus ink borders.
-- **Don't** set type in any face but DotGothic16 or in any weight but 400.
+- **Don't** set type in any face but Pixelify Sans, or bold anything that is not a heading.
 - **Don't** use smooth decorative gradients; the only gradients are the ink scrim under text on artwork, the bead's own radial fill, and the hard two-tone loading stripe.
 - **Don't** round a corner on anything that is not a bead.
 - **Don't** show a disabled control only by dimming it.

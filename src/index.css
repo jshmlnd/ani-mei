@@ -69,7 +69,7 @@
   --accent-deep-rgb: 247, 143, 184;
   --radius: 0px;
 
-  --sans: "DotGothic16", "MS Gothic", ui-monospace, monospace;
+  --sans: "Pixelify Sans", ui-monospace, monospace;
   --heading: var(--sans);
 
   font: 16px/160% var(--sans);
@@ -137,7 +137,7 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--heading);
-  font-weight: 400;
+  font-weight: 600;
   color: var(--text-primary);
   text-wrap: balance;
 }

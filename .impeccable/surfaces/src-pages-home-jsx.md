@@ -15,7 +15,7 @@ Constraints: pink accent #ffb6d5 / #f78fb8 kept; "Made for my, Jimei" and footer
 
 THESIS: Animei is made bead by bead for Jimei, like a fan's perler-bead sprite. It refuses the streaming-clone arrangement of a giant blurred hero banner and glowing glass cards: the shell is square, flat and plainly a streaming app, and the world enters through type, palette, density and one signature move.
 
-OWN-WORLD: Dark plum pegboard ground snapped to one 8-step plum ramp (no free opacities); pink #ffb6d5 bead as the only accent, deep pink #f78fb8 for pressed, mint #8fe3c8 for "new/airing" state only. DotGothic16 everywhere. Zero border radius except beads; 4px square borders in the darkest ramp step; buttons are flat blocks with a 4px bottom bead-edge. States read without colour: hollow at rest, filled on, crossed out when unavailable, ringed on focus. Hierarchy for score uses a fixed bead-size ramp.
+OWN-WORLD: Dark plum pegboard ground snapped to one 8-step plum ramp (no free opacities); pink #ffb6d5 bead as the only accent, deep pink #f78fb8 for pressed, mint #8fe3c8 for "new/airing" state only. Pixelify Sans everywhere (600 headings, 400 text). Zero border radius except beads; 4px square borders in the darkest ramp step; buttons are flat blocks with a 4px bottom bead-edge. States read without colour: hollow at rest, filled on, crossed out when unavailable, ringed on focus. Hierarchy for score uses a fixed bead-size ramp.
 
 STORY: Jimei sees what to watch next, knows how far she is in a show at a glance, and presses play.
 
